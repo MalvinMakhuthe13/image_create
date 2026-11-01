@@ -10,7 +10,7 @@ def test_model_mask_is_resized_to_full_oriented_source_dimensions(tmp_path, monk
     image_path = tmp_path / "source.png"
     Image.new("RGB", (320, 240), "white").save(image_path)
     model_mask = np.zeros((1024, 1024), dtype=np.uint8)
-    model_mask[200:800, 200:800] = 255
+    model_mask[40:160, 40:200] = 255
     monkeypatch.setattr(segmentation, "_rembg_mask", lambda rgb: model_mask[:rgb.shape[0], :rgb.shape[1]])
     result = segmentation.generate_subject_mask(image_path, max_dimension=256)
     assert result["status"] == "automatic"
