@@ -21,7 +21,7 @@ main{max-width:1180px;margin:0 auto;padding:38px 22px 70px}.intro{max-width:760p
 <body>
 <header><div class="brand">image<span>_create</span></div><div class="tag">CPU-FIRST CAPTURE INTELLIGENCE</div></header>
 <main>
-<section class="intro"><div class="eyebrow">Photogrammetry workspace</div><h1>Start with your photographs.<br>Know what they can prove.</h1><p>Upload an image set to inspect image quality, duplicates, camera metadata and capture readiness. Then open the inspection workspace to review geometric correspondences and create precise object masks.</p></section>
+<section class="intro"><div class="eyebrow">Photogrammetry workspace</div><h1>Start with your photographs.<br>Know what they can prove.</h1><p>Upload an image set to inspect image quality, duplicates, camera metadata and capture readiness. Then open the inspection workspace to review geometric correspondences and inspect automatically generated subject masks, with optional manual corrections.</p></section>
 <section class="panel">
 <div class="drop" id="drop"><strong>Drop your capture photographs here</strong><div class="muted">JPEG · PNG · WebP · TIFF · BMP</div><div class="row"><label class="file-button" for="files">Choose photographs</label><button class="secondary" id="clear" type="button">Clear selection</button></div><input id="files" type="file" accept="image/jpeg,image/png,image/webp,image/tiff,image/bmp" multiple></div>
 <div id="selected"><div class="muted">No photographs selected yet.</div></div>
