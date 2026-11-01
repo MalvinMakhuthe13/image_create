@@ -66,9 +66,11 @@ def analyze_image(path: Path, max_pixels: int) -> tuple[ImageAnalysis, str]:
             image_format = (source.format or "").upper()
             if image_format not in FORMAT_EXTENSIONS:
                 raise ValueError(f"Unsupported image format: {image_format or 'unknown'}")
-            width, height = source.size
-            if width < 1 or height < 1 or width * height > max_pixels:
-                raise ValueError(f"Image dimensions {width}x{height} exceed the pixel limit")
+            source_width, source_height = source.size
+            if source_width < 1 or source_height < 1 or source_width * source_height > max_pixels:
+                raise ValueError(
+                    f"Image dimensions {source_width}x{source_height} exceed the pixel limit"
+                )
             exif = source.getexif()
             captured_at = _exif_text(exif, 36867) or _exif_text(exif, 306)
             camera_make = _exif_text(exif, 271)
@@ -80,6 +82,9 @@ def analyze_image(path: Path, max_pixels: int) -> tuple[ImageAnalysis, str]:
                 focal_length = None
             mode = source.mode
             image = ImageOps.exif_transpose(source).convert("RGB")
+            # Report the same orientation and dimensions used by matching,
+            # masks and calibration; the original file bytes remain untouched.
+            width, height = image.size
             image.thumbnail((512, 512), Image.Resampling.LANCZOS)
 
     gray = ImageOps.grayscale(image)
