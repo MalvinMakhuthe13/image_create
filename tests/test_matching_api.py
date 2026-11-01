@@ -348,8 +348,10 @@ def test_object_only_reruns_geometry_using_saved_manual_masks(tmp_path, monkeypa
     object_result = pair["object_only"]
     assert object_result["status"] == "complete"
     assert object_result["mask_sources"] == ["manual", "manual"]
-    assert object_result["filtered_match_count"] == pair["tentative_matches"]
-    assert object_result["tentative_matches"] == pair["tentative_matches"]
+    assert object_result["feature_extraction"]["method"] == "masked_sift_clahe_high_recall"
+    assert object_result["feature_extraction"]["left_object_features"] > 0
+    assert object_result["feature_extraction"]["right_object_features"] > 0
+    assert object_result["tentative_matches"] == object_result["filtered_match_count"]
     assert len(object_result["diagnostic_correspondences"]) > 0
 
 
