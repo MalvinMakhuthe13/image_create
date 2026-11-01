@@ -184,39 +184,65 @@ SPATIAL_DEDUPLICATION_RADIUS_PX = 5.0
 def _deduplicate_spatial_inliers(left, right, matches, inlier_indices):
     """Keep the best descriptor match for each distinct 2D-to-2D location pair.
 
-    A candidate is considered a duplicate only when it is within the radius
-    on BOTH source images of an already retained correspondence. Candidates
-    are considered in ascending descriptor-distance order.
+    A candidate is a duplicate only when it is within the radius on BOTH
+    source images. Four-dimensional spatial hashing limits exact comparisons
+    to neighbouring cells while preserving the previous radius test.
     """
-    retained = []
-    for match_index in sorted(
-        inlier_indices, key=lambda index: matches[index].distance
-    ):
+    radius = SPATIAL_DEDUPLICATION_RADIUS_PX
+    radius_squared = radius * radius
+    buckets: dict[tuple[int, int, int, int], list[int]] = {}
+    retained: list[int] = []
+
+    # Stable tie-breaking preserves input order when descriptor distances match.
+    ordered = sorted(inlier_indices, key=lambda index: (matches[index].distance, index))
+    for match_index in ordered:
         match = matches[match_index]
-        left_point = left.keypoints[match.query_index]
-        right_point = right.keypoints[match.train_index]
+        left_x, left_y = left.keypoints[match.query_index]
+        right_x, right_y = right.keypoints[match.train_index]
+        coordinates = (left_x, left_y, right_x, right_y)
+        cell = tuple(int(value // radius) for value in coordinates)
 
         duplicate = False
-        for kept_index in retained:
-            kept = matches[kept_index]
-            kept_left = left.keypoints[kept.query_index]
-            kept_right = right.keypoints[kept.train_index]
-            left_distance = (
-                (left_point[0] - kept_left[0]) ** 2
-                + (left_point[1] - kept_left[1]) ** 2
-            ) ** 0.5
-            right_distance = (
-                (right_point[0] - kept_right[0]) ** 2
-                + (right_point[1] - kept_right[1]) ** 2
-            ) ** 0.5
-            if (
-                left_distance <= SPATIAL_DEDUPLICATION_RADIUS_PX
-                and right_distance <= SPATIAL_DEDUPLICATION_RADIUS_PX
-            ):
-                duplicate = True
+        for dx0 in (-1, 0, 1):
+            if duplicate:
                 break
+            for dy0 in (-1, 0, 1):
+                if duplicate:
+                    break
+                for dx1 in (-1, 0, 1):
+                    if duplicate:
+                        break
+                    for dy1 in (-1, 0, 1):
+                        neighbour = (
+                            cell[0] + dx0,
+                            cell[1] + dy0,
+                            cell[2] + dx1,
+                            cell[3] + dy1,
+                        )
+                        for kept_index in buckets.get(neighbour, ()):
+                            kept = matches[kept_index]
+                            kept_left_x, kept_left_y = left.keypoints[kept.query_index]
+                            kept_right_x, kept_right_y = right.keypoints[kept.train_index]
+                            left_distance_squared = (
+                                (left_x - kept_left_x) ** 2
+                                + (left_y - kept_left_y) ** 2
+                            )
+                            right_distance_squared = (
+                                (right_x - kept_right_x) ** 2
+                                + (right_y - kept_right_y) ** 2
+                            )
+                            if (
+                                left_distance_squared <= radius_squared
+                                and right_distance_squared <= radius_squared
+                            ):
+                                duplicate = True
+                                break
+                        if duplicate:
+                            break
         if not duplicate:
             retained.append(match_index)
+            buckets.setdefault(cell, []).append(match_index)
+
     return tuple(retained)
 
 
@@ -485,6 +511,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "status": "complete",
                 **object_result.to_dict(),
                 "filtered_match_count": len(object_matches),
+                "spatial_distribution": _spatial_distribution(
+                    left, right, object_matches, object_result
+                ),
                 "mask_sources": ["manual", "manual"],
                 "mask_filter_diagnostics": mask_filter_diagnostics,
                 "boundary_distance_diagnostics": summarize_mask_boundary_distances(
