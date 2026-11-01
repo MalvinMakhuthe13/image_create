@@ -209,6 +209,7 @@ def verify_geometry(
         ransac_threshold_px=ransac_threshold_px,
     )
     return GeometryResult(
-        verified, model, count, inliers, round(ratio, 4), median_error,
+        verified, model, count, inliers, round(ratio, 4),
+        median_error if model == "homography" else None,
         reason, inlier_indices, diagnostics,
     )
