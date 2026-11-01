@@ -22,6 +22,9 @@ from app.engine.matching.subject_region import (
     estimate_subject_region,
     pair_subject_support,
 )
+from app.engine.matching.mask_boundary import (
+    summarize_mask_boundary_distances,
+)
 
 router = APIRouter(prefix="/analysis", tags=["geometric matching"])
 STORED_IMAGE_PATTERN = re.compile(
@@ -484,6 +487,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "filtered_match_count": len(object_matches),
                 "mask_sources": ["manual", "manual"],
                 "mask_filter_diagnostics": mask_filter_diagnostics,
+                "boundary_distance_diagnostics": summarize_mask_boundary_distances(
+                    left, right, matches, left_mask, right_mask
+                ),
                 "diagnostic_correspondences": _pair_diagnostics(
                     left, right, object_matches, object_result
                 ),

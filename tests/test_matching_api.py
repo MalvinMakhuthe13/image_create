@@ -403,3 +403,97 @@ def test_mask_filter_diagnostics_count_each_mask_independently():
     assert result["left_outside_right_inside"] == 1
     assert result["outside_both_masks"] == 1
     assert result["excluded_by_either_mask"] == 2
+
+def test_mask_boundary_distances_measure_outside_keypoints():
+    import numpy as np
+    from types import SimpleNamespace
+
+    from app.engine.matching.mask_boundary import (
+        summarize_mask_boundary_distances,
+    )
+    from app.engine.matching.models import DescriptorMatch
+
+    left = SimpleNamespace(
+        keypoints=((2.0, 5.0), (5.0, 5.0), (9.0, 5.0))
+    )
+    right = SimpleNamespace(
+        keypoints=((5.0, 2.0), (5.0, 5.0), (5.0, 9.0))
+    )
+
+    left_mask = np.zeros((12, 12), dtype=bool)
+    right_mask = np.zeros((12, 12), dtype=bool)
+    left_mask[4:7, 4:7] = True
+    right_mask[4:7, 4:7] = True
+
+    matches = [
+        DescriptorMatch(0, 0, 1.0),
+        DescriptorMatch(1, 1, 1.0),
+        DescriptorMatch(2, 2, 1.0),
+    ]
+
+    result = summarize_mask_boundary_distances(
+        left, right, matches, left_mask, right_mask
+    )
+
+    assert result["status"] == "complete"
+    assert result["left_image"]["outside_mask_endpoints"] == 2
+    assert result["right_image"]["outside_mask_endpoints"] == 2
+    assert result["correspondences"]["at_least_one_outside_endpoint"] == 2
+    assert result["correspondences"]["both_endpoints_outside"] == 2
+    pair_bands = result["correspondences"]["distance_bands_using_nearest_endpoint"]
+    assert pair_bands["0_to_2_px"] == 1
+    assert pair_bands["over_2_to_5_px"] == 1
+
+
+def test_mask_boundary_distances_report_out_of_image_and_invalid_indices():
+    import numpy as np
+    from types import SimpleNamespace
+
+    from app.engine.matching.mask_boundary import (
+        summarize_mask_boundary_distances,
+    )
+    from app.engine.matching.models import DescriptorMatch
+
+    left = SimpleNamespace(keypoints=((-2.0, 5.0), (5.0, 5.0)))
+    right = SimpleNamespace(keypoints=((5.0, 5.0), (5.0, 5.0)))
+
+    mask = np.zeros((12, 12), dtype=bool)
+    mask[4:7, 4:7] = True
+
+    matches = [
+        DescriptorMatch(0, 0, 1.0),
+        DescriptorMatch(99, 1, 1.0),
+    ]
+
+    result = summarize_mask_boundary_distances(
+        left, right, matches, mask, mask
+    )
+
+    assert result["left_image"]["out_of_image_endpoints"] == 1
+    assert result["left_image"]["invalid_keypoint_indices"] == 1
+    assert result["left_image"]["measurable_outside_endpoints"] == 0
+
+
+def test_mask_boundary_distances_handle_empty_masks():
+    import numpy as np
+    from types import SimpleNamespace
+
+    from app.engine.matching.mask_boundary import (
+        summarize_mask_boundary_distances,
+    )
+    from app.engine.matching.models import DescriptorMatch
+
+    image = SimpleNamespace(keypoints=((2.0, 2.0),))
+    empty_mask = np.zeros((10, 10), dtype=bool)
+
+    result = summarize_mask_boundary_distances(
+        image,
+        image,
+        [DescriptorMatch(0, 0, 1.0)],
+        empty_mask,
+        empty_mask,
+    )
+
+    assert result["left_image"]["status"] == "no_foreground_pixels"
+    assert result["right_image"]["status"] == "no_foreground_pixels"
+    assert result["left_image"]["measurable_outside_endpoints"] == 0
