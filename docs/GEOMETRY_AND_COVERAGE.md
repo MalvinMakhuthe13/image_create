@@ -38,3 +38,7 @@ The current API can identify weak pairwise links, blur/exposure concerns, near d
 Development mode remains convenient for localhost use. Outside development, all API-prefix routes require `X-API-Key` matching the `IMAGE_CREATE_API_KEY` environment variable. The service fails closed with HTTP 503 if the environment is non-development and the key is absent.
 
 This is a shared service key, not user authentication or tenant isolation. Before public multi-user deployment, add per-user identity, authorization and analysis ownership, quotas, rate limiting, persistent object storage, background workers, retention policies, and audit logs. Do not expose the local upload directory as a public static directory.
+
+## Job persistence boundary
+
+Job metadata is persisted in a local SQLite database using WAL mode and a busy timeout. This survives API process restarts on a single host with persistent disk. It does not yet provide distributed locking, worker leases, retry scheduling, progress events, or multi-host coordination. Production processing still requires a dedicated worker queue and durable shared storage.
