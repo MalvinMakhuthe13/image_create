@@ -8,6 +8,7 @@ segmentation. Generated masks are cached separately from immutable source images
 """
 
 from pathlib import Path
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -39,12 +40,18 @@ def _load_rgb(path: Path, max_dimension: int) -> tuple[np.ndarray, tuple[int, in
         return np.asarray(oriented), original_size
 
 
+@lru_cache(maxsize=1)
+def _u2net_session():
+    # Reuse model weights/session across every image in the same worker.
+    from rembg import new_session
+    return new_session("u2net", providers=["CPUExecutionProvider"])
+
+
 def _rembg_mask(rgb: np.ndarray) -> np.ndarray:
     # Lazy import keeps the base CPU feature-analysis installation lightweight.
-    from rembg import new_session, remove
+    from rembg import remove
 
-    session = new_session("u2net", providers=["CPUExecutionProvider"])
-    result = remove(Image.fromarray(rgb), session=session, only_mask=True)
+    result = remove(Image.fromarray(rgb), session=_u2net_session(), only_mask=True)
     if isinstance(result, Image.Image):
         alpha = np.asarray(result.convert("L"), dtype=np.uint8)
     else:
