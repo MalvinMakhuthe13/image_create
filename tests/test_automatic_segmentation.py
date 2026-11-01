@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 import numpy as np
+import pytest
 from PIL import Image
 
 from app.engine.matching import automatic_segmentation as segmentation
@@ -63,3 +66,27 @@ def test_saved_mask_is_separate_atomic_png(tmp_path):
         assert saved.mode == "L"
         assert np.array_equal(np.asarray(saved), mask)
     assert not list(target.parent.glob(".*.tmp.png"))
+
+
+
+@pytest.mark.skipif(
+    os.getenv("IMAGE_CREATE_RUN_MODEL_SMOKE") != "1",
+    reason="real U2-Net CPU smoke test runs in the dedicated optional-model CI job",
+)
+def test_real_u2net_model_runs_on_cpu_without_heuristic_fallback(tmp_path):
+    image_path = tmp_path / "salient-object.png"
+    image = Image.new("RGB", (512, 512), (245, 245, 245))
+    from PIL import ImageDraw
+
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((112, 82, 400, 430), fill=(25, 70, 130))
+    draw.rectangle((190, 150, 330, 190), fill=(235, 190, 35))
+    image.save(image_path)
+
+    result = segmentation.generate_subject_mask(
+        image_path, max_dimension=512, allow_heuristic_fallback=False
+    )
+    assert result["status"] == "automatic"
+    assert result["method"] == "u2net_rembg_onnx_cpu"
+    assert result["mask"].shape == (512, 512)
+    assert 0.005 <= result["foreground_fraction"] <= 0.98
