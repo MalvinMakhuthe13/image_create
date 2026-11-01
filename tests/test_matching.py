@@ -92,3 +92,59 @@ def test_geometry_rejects_concentrated_correspondence_cluster():
     assert result.diagnostics["spatially_concentrated"] is True
     assert not result.verified
     assert result.reason == "spatially_concentrated_inliers"
+
+
+def test_relative_pose_uses_intrinsics_and_reports_unknown_translation_scale():
+    from app.engine.matching.models import DescriptorMatch, ImageFeatures
+    from app.engine.matching.pose_estimator import estimate_relative_pose
+
+    rng = np.random.default_rng(18)
+    points_3d = np.column_stack((
+        rng.uniform(-1.5, 1.5, 80),
+        rng.uniform(-1.0, 1.0, 80),
+        rng.uniform(4.0, 9.0, 80),
+    ))
+    focal = 900.0
+    camera = np.array([
+        [focal, 0.0, 640.0],
+        [0.0, focal, 480.0],
+        [0.0, 0.0, 1.0],
+    ])
+    angle = np.deg2rad(3.0)
+    rotation = np.array([
+        [np.cos(angle), 0.0, np.sin(angle)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(angle), 0.0, np.cos(angle)],
+    ])
+    translation = np.array([0.35, 0.02, 0.01])
+
+    def project(points):
+        normalized = points[:, :2] / points[:, 2, None]
+        pixels = normalized * focal + np.array([640.0, 480.0])
+        return tuple(map(tuple, pixels))
+
+    left_points = project(points_3d)
+    right_3d = (rotation @ points_3d.T).T + translation
+    right_points = project(right_3d)
+    left = ImageFeatures(0, left_points, None, 1280, 960, 1.0, 1.0, camera, "test_calibration")
+    right = ImageFeatures(1, right_points, None, 1280, 960, 1.0, 1.0, camera, "test_calibration")
+    matches = [DescriptorMatch(i, i, 1.0) for i in range(len(left_points))]
+
+    pose = estimate_relative_pose(left, right, matches, range(len(matches)))
+    assert pose["status"] == "estimated"
+    assert pose["pose_inlier_count"] >= 70
+    assert pose["translation_scale"] == "unknown_monocular_scale"
+    assert pose["calibration_quality"] == "user_or_external_calibration"
+
+
+def test_relative_pose_is_explicitly_unavailable_without_intrinsics():
+    from app.engine.matching.models import DescriptorMatch, ImageFeatures
+    from app.engine.matching.pose_estimator import estimate_relative_pose
+
+    points = tuple((float(i), float(i * 2)) for i in range(10))
+    left = ImageFeatures(0, points, None, 100, 100, 1.0, 1.0)
+    right = ImageFeatures(1, points, None, 100, 100, 1.0, 1.0)
+    matches = [DescriptorMatch(i, i, 1.0) for i in range(10)]
+    assert estimate_relative_pose(left, right, matches, range(10)) == {
+        "status": "unavailable", "reason": "camera_intrinsics_missing"
+    }
