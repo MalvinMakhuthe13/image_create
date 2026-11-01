@@ -363,9 +363,13 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
     optimized_count = sum(
         item.get("status") == "optimized" for item in output_components
     )
+    usable_count = sum(
+        item.get("status") in {"optimized", "optimization_stopped"}
+        for item in output_components
+    )
     overall_status = (
         "complete" if output_components and optimized_count == len(output_components)
-        else "partial" if optimized_count
+        else "partial" if usable_count
         else "unavailable"
     )
     return {
