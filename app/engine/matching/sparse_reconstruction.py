@@ -360,8 +360,16 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
                 "reason": str(exc)[:300],
             })
 
+    optimized_count = sum(
+        item.get("status") == "optimized" for item in output_components
+    )
+    overall_status = (
+        "complete" if output_components and optimized_count == len(output_components)
+        else "partial" if optimized_count
+        else "unavailable"
+    )
     return {
-        "status": "complete" if output_components else "unavailable",
+        "status": overall_status,
         "method": "incremental_pairwise_initialization_then_sparse_global_bundle_adjustment",
         "camera_count": len(features),
         "calibrated_pair_edges": len(edges),
