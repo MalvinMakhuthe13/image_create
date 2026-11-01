@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
 from app.engine.matching.capture_advisor import recommend_capture_improvements
+from app.engine.matching.sparse_reconstruction import reconstruct_sparse_scene
 from app.engine.matching import (
     build_connectivity_graph,
     extract_features,
@@ -468,6 +469,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
 
     verified_pairs = []
     pair_results = []
+    reconstruction_pair_rows = []
     adjacent_pairs_evaluated = 0
     non_adjacent_pairs_evaluated = 0
 
@@ -536,6 +538,12 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 ),
             }
 
+        reconstruction_pair_rows.append({
+            "image_indices": [left_index, right_index],
+            "_matches": matches,
+            "_inliers": result.inlier_match_indices,
+            "pose": (result.diagnostics or {}).get("relative_camera_pose"),
+        })
         pair_results.append({
             "image_indices": [left_index, right_index],
             "filenames": [image_paths[left_index].name, image_paths[right_index].name],
@@ -555,6 +563,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         })
 
     graph = build_connectivity_graph(len(image_paths), verified_pairs)
+    sparse_reconstruction = reconstruct_sparse_scene(features, reconstruction_pair_rows)
     return {
         "analysis_id": str(analysis_id),
         "status": "complete",
@@ -621,6 +630,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             ),
         },
         "connectivity": graph,
+        "sparse_reconstruction": sparse_reconstruction,
         "capture_recommendations": recommend_capture_improvements(
             [
                 {
