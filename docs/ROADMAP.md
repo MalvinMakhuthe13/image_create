@@ -31,6 +31,8 @@ This roadmap distinguishes implemented code from capabilities that still need im
 - [ ] Metric scale from explicit scale bars, known dimensions or trusted sensor priors.
 
 ### Dense geometry — not implemented
+- [x] Initial backend/licensing research: COLMAP CPU dense limitation and OpenMVS CPU SGM/AGPL trade-off documented.
+- [ ] Select and approve a backend/license path; do not bundle AGPL software without an explicit compliance decision.
 - [ ] Backend interface and capability discovery for a mature dense MVS engine.
 - [ ] CPU/GPU selection, VRAM/RAM estimates, timeouts and clear unsupported-hardware reporting.
 - [ ] Per-view dense depth and confidence maps.
