@@ -467,6 +467,30 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         for index, image_path in enumerate(image_paths)
     ]
 
+    # Object-only extraction is independent of the all-scene baseline. The
+    # detector sees only pixels inside the user's saved mask, with a one-pixel
+    # eroded boundary and a higher-recall SIFT/CLAHE profile.
+    object_features = []
+    for index, image_path in enumerate(image_paths):
+        mask = manual_masks[index]
+        if mask is None:
+            object_features.append(None)
+            continue
+        try:
+            object_features.append(extract_features(
+                image_path,
+                index,
+                max_dimension=settings.matching_max_dimension,
+                max_features=max(8000, settings.matching_max_features * 2),
+                mask=mask,
+                feature_profile="object",
+            ))
+        except (OSError, ValueError, cv2.error) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Could not extract masked object features from image {index}: {exc}",
+            ) from exc
+
     verified_pairs = []
     pair_results = []
     reconstruction_pair_rows = []
@@ -512,29 +536,53 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             mask_filter_diagnostics = _mask_filter_diagnostics(
                 left, right, matches, left_mask, right_mask
             )
-            object_matches = [
-                match for match in matches
-                if _inside_both_manual_masks(left, right, match, left_mask, right_mask)
-            ]
-            object_result = verify_geometry(left, right, object_matches)
+            object_left = object_features[left_index]
+            object_right = object_features[right_index]
+            object_matches = match_descriptors(
+                object_left, object_right,
+                ratio_threshold=0.86,
+                max_matches=6000,
+            )
+            object_result = verify_geometry(
+                object_left, object_right, object_matches
+            )
             object_only = {
                 "status": "complete",
                 **object_result.to_dict(),
+                "feature_extraction": {
+                    "method": "masked_sift_clahe_high_recall",
+                    "left_object_features": object_left.feature_count,
+                    "right_object_features": object_right.feature_count,
+                    "ratio_threshold": 0.86,
+                    "max_features_per_image": max(8000, settings.matching_max_features * 2),
+                    "mask_boundary_eroded_px_at_working_resolution": 1,
+                    "note": (
+                        "Descriptors were detected independently inside each saved manual "
+                        "mask; this is not merely a post-filter of all-scene descriptors."
+                    ),
+                },
                 "filtered_match_count": len(object_matches),
                 "spatial_distribution": _spatial_distribution(
-                    left, right, object_matches, object_result
+                    object_left, object_right, object_matches, object_result
                 ),
                 "mask_sources": ["manual", "manual"],
-                "mask_filter_diagnostics": mask_filter_diagnostics,
+                "mask_filter_diagnostics": {
+                    **mask_filter_diagnostics,
+                    "interpretation": (
+                        "Legacy baseline-descriptor filtering counts are retained for "
+                        "comparison; object-only results now come from independent "
+                        "mask-aware feature extraction."
+                    ),
+                },
                 "boundary_distance_diagnostics": summarize_mask_boundary_distances(
                     left, right, matches, left_mask, right_mask
                 ),
                 "diagnostic_correspondences": _pair_diagnostics(
-                    left, right, object_matches, object_result
+                    object_left, object_right, object_matches, object_result
                 ),
                 "note": (
-                    "Independent object-only verification: only descriptor matches with "
-                    "both endpoints inside the two saved manual masks entered RANSAC."
+                    "Independent object-only feature extraction, descriptor matching and "
+                    "RANSAC. The all-scene baseline and connectivity graph remain separate."
                 ),
             }
 
