@@ -9,6 +9,8 @@ segmentation. Generated masks are cached separately from immutable source images
 
 from pathlib import Path
 from functools import lru_cache
+import os
+import tempfile
 
 import cv2
 import numpy as np
@@ -155,8 +157,17 @@ def generate_subject_mask(
 def save_generated_mask(mask: np.ndarray, target: Path) -> None:
     """Atomically persist a generated mask separately from source photographs."""
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(".tmp.png")
-    Image.fromarray(np.asarray(mask, dtype=np.uint8), mode="L").save(
-        temporary, format="PNG", optimize=True
-    )
-    temporary.replace(target)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{target.stem}.", suffix=".tmp.png",
+            dir=target.parent, delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+        Image.fromarray(np.asarray(mask, dtype=np.uint8), mode="L").save(
+            temporary_path, format="PNG", optimize=True
+        )
+        os.replace(temporary_path, target)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
