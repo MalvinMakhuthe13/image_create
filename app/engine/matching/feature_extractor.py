@@ -11,7 +11,8 @@ from app.engine.matching.models import ImageFeatures
 
 
 def extract_features(image_path: Path, image_index: int, *, max_dimension: int = 1600,
-                     max_features: int = 6000) -> ImageFeatures:
+                     max_features: int = 6000, mask: np.ndarray | None = None,
+                     feature_profile: str = "baseline") -> ImageFeatures:
     if max_dimension < 128 or max_features < 32:
         raise ValueError("max_dimension must be >=128 and max_features must be >=32")
     with Image.open(image_path) as source:
@@ -21,7 +22,39 @@ def extract_features(image_path: Path, image_index: int, *, max_dimension: int =
         image.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
         rgb = np.asarray(image)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    keypoints, descriptors = cv2.SIFT_create(nfeatures=max_features).detectAndCompute(gray, None)
+    detector_mask = None
+    if mask is not None:
+        mask_array = np.asarray(mask)
+        if mask_array.ndim != 2 or mask_array.shape != (source_height, source_width):
+            raise ValueError("feature mask must match the EXIF-oriented source image dimensions")
+        detector_mask = cv2.resize(
+            (mask_array > 0).astype(np.uint8) * 255,
+            (image.width, image.height),
+            interpolation=cv2.INTER_NEAREST,
+        )
+        # Ignore the uncertain segmentation edge: SIFT descriptors straddling
+        # object/background boundaries are a common source of false matches.
+        detector_mask = cv2.erode(
+            detector_mask, np.ones((3, 3), dtype=np.uint8), iterations=1
+        )
+    if feature_profile not in {"baseline", "object"}:
+        raise ValueError("feature_profile must be 'baseline' or 'object'")
+    if feature_profile == "object":
+        # Lower contrast threshold recovers subtle fabric/stitching details.
+        # CLAHE is applied only to the detector input; source pixels are untouched.
+        detector_image = cv2.createCLAHE(
+            clipLimit=2.0, tileGridSize=(8, 8)
+        ).apply(gray)
+        detector = cv2.SIFT_create(
+            nfeatures=max_features,
+            contrastThreshold=0.012,
+            edgeThreshold=12,
+            sigma=1.2,
+        )
+    else:
+        detector_image = gray
+        detector = cv2.SIFT_create(nfeatures=max_features)
+    keypoints, descriptors = detector.detectAndCompute(detector_image, detector_mask)
     scale_x, scale_y = source_width / image.width, source_height / image.height
     points = tuple((float(k.pt[0] * scale_x), float(k.pt[1] * scale_y)) for k in keypoints)
     if descriptors is not None:
