@@ -12,6 +12,9 @@ from scipy.spatial.transform import Rotation
 from app.engine.matching.models import ImageFeatures
 
 
+MAX_ACCEPTABLE_MEDIAN_REPROJECTION_ERROR_PX = 5.0
+
+
 @dataclass(frozen=True)
 class PairPose:
     left: int
@@ -329,14 +332,27 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
             residual_values = residual(optimized.x)
             reprojection_values = residual_values[:-1].reshape(-1, 2)
             median_error = float(np.median(np.linalg.norm(reprojection_values, axis=1)))
+            quality_passed = (
+                np.isfinite(median_error)
+                and median_error <= MAX_ACCEPTABLE_MEDIAN_REPROJECTION_ERROR_PX
+            )
+            component_status = (
+                "low_quality" if optimized.success and not quality_passed
+                else "optimized" if optimized.success
+                else "optimization_stopped"
+            )
             output_components.append({
                 "image_indices": component,
-                "status": "optimized" if optimized.success else "optimization_stopped",
+                "status": component_status,
                 "camera_count": len(component),
                 "landmark_count": int(len(optimized_points)),
                 "multi_view_track_count": int(len(observations)),
                 "observation_count": len(flat_observations),
                 "median_reprojection_error_px": round(median_error, 4),
+                "reprojection_quality_gate": {
+                    "status": "passed" if quality_passed else "failed",
+                    "maximum_median_error_px": MAX_ACCEPTABLE_MEDIAN_REPROJECTION_ERROR_PX,
+                },
                 "optimizer": "scipy_least_squares_soft_l1",
                 "optimizer_success": bool(optimized.success),
                 "optimizer_message": str(optimized.message),
@@ -364,7 +380,7 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
         item.get("status") == "optimized" for item in output_components
     )
     usable_count = sum(
-        item.get("status") in {"optimized", "optimization_stopped"}
+        item.get("status") in {"optimized", "optimization_stopped", "low_quality"}
         for item in output_components
     )
     overall_status = (
