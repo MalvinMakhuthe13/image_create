@@ -16,6 +16,7 @@ dependencies = [
   "Pillow>=10.4,<13",
   "numpy>=1.26,<3",
   "opencv-python-headless>=4.10,<5",
+  "scipy>=1.11,<2",
 
 ]
 
