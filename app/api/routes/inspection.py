@@ -153,10 +153,15 @@ async def save_manual_mask(
         )
     # Normalize antialiased brush edges to a binary foreground/background mask.
     binary = mask.point(lambda value: 255 if value >= 128 else 0, mode="L")
+    foreground_fraction = float(np.asarray(binary, dtype=np.uint8).mean() / 255.0)
+    if not 0.005 <= foreground_fraction <= 0.98:
+        raise HTTPException(
+            status_code=422,
+            detail="Mask is implausibly empty or full; paint the complete subject silhouette before saving.",
+        )
     target = _mask_path(analysis_id, image_index)
     target.parent.mkdir(parents=True, exist_ok=True)
     binary.save(target, format="PNG", optimize=True)
-    foreground_fraction = float(np.asarray(binary, dtype=np.uint8).mean() / 255.0)
     return {
         "status": "saved",
         "image_index": image_index,
@@ -177,7 +182,7 @@ INSPECTION_HTML = r'''<!doctype html>
 <header><h1>Frame Intelligence · Visual Inspection</h1><p>CPU-only correspondence review and automatic subject masks</p></header>
 <div class="wrap"><div class="status" id="status">Loading image set…</div>
 <div class="tabs"><button class="active" id="tabMatches">Correspondence viewer</button><button id="tabMask">Subject mask</button></div>
-<section id="matchesPanel" class="panel"><h2>Geometric correspondences</h2><div class="toolbar"><button class="primary" id="runMatching">Run / refresh matching</button><label>Image pair <select id="pairSelect"><option>Run matching first</option></select></label><label>Correspondences <select id="correspondenceMode"><option value="all">All-scene baseline</option><option value="object" selected>Object-only (manual masks)</option></select></label><label><input type="checkbox" id="showOutliers" checked> Show non-inliers</label></div>
+<section id="matchesPanel" class="panel"><h2>Geometric correspondences</h2><div class="toolbar"><button class="primary" id="runMatching">Run / refresh matching</button><label>Image pair <select id="pairSelect"><option>Run matching first</option></select></label><label>Correspondences <select id="correspondenceMode"><option value="all">All-scene baseline</option><option value="object" selected>Object-only (automatic subject masks)</option></select></label><label><input type="checkbox" id="showOutliers" checked> Show non-inliers</label></div>
 <div id="resultSummary" class="result-summary"></div><div class="legend"><span><i class="dot" style="background:#39df8c"></i>RANSAC inlier</span><span><i class="dot" style="background:#ff6464"></i>RANSAC-tested outlier</span><span><i class="dot" style="background:#f2b84b"></i>Unverified candidate</span></div>
 <div class="canvasbox"><canvas id="pairCanvas"></canvas></div><p class="hint">Green = RANSAC inlier; red = candidate tested and rejected by a fitted RANSAC model; amber = unverified because no usable model was fitted. Object-only mode independently reruns RANSAC using descriptor matches whose two endpoints are inside accepted automatic subject masks or optional manual corrections. The all-scene baseline and its connectivity graph remain separate.</p></section>
 <section id="maskPanel" class="panel hidden"><h2>Automatic subject mask review · optional manual correction</h2><div class="grid"><div><div class="toolbar"><label>Image <select id="maskImage"></select></label><button id="loadMask">Load detected mask</button><button id="clearMask">Clear mask</button></div><div class="canvasbox"><canvas id="maskCanvas"></canvas></div></div><aside><div class="toolbar"><button class="active" id="paintTool">Paint object</button><button id="eraseTool">Erase</button></div><label>Brush size <input id="brushSize" type="range" min="3" max="120" value="28"></label><p class="hint">Review the automatically generated subject mask first. Paint or erase only when a correction is genuinely needed. You can zoom the browser to work on details. White = object; black = background.</p><button class="primary" id="saveMask">Save optional correction</button><p class="hint">Manual corrections are stored separately from the automatic mask and original photographs. Save at the source image's exact dimensions.</p></aside></div></section>
