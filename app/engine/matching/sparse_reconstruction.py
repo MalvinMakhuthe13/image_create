@@ -78,6 +78,11 @@ def _initial_camera_poses(image_count: int, edges: list[PairPose]):
     return rotations, translations, groups
 
 
+def _camera_center(rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:
+    """Convert a world-to-camera extrinsic transform to its world-space camera centre."""
+    return -rotation.T @ translation
+
+
 def _build_tracks(pair_rows, features):
     """Union keypoint observations connected by verified pairwise inliers."""
     parent = {}
@@ -222,7 +227,8 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
         baseline_edge = component_edges[0]
         baseline_length = 1.0
         initial_baseline = np.linalg.norm(
-            initial_t[baseline_edge.right] - initial_t[baseline_edge.left]
+            _camera_center(rotations[baseline_edge.right], initial_t[baseline_edge.right])
+            - _camera_center(rotations[baseline_edge.left], initial_t[baseline_edge.left])
         )
         if initial_baseline > 1e-8:
             baseline_length = initial_baseline
@@ -262,10 +268,12 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
             point_start = point_offset + point_id * 3
             jacobian_pattern[2 * row_index:2 * row_index + 2,
                              point_start:point_start + 3] = 1
+        # Camera-centre distance depends on both rotation and translation for
+        # world-to-camera extrinsics, so include all six endpoint parameters.
         for endpoint in (baseline_edge.left, baseline_edge.right):
             if endpoint != root:
-                camera_start = camera_offset[endpoint] + 3
-                jacobian_pattern[-1, camera_start:camera_start + 3] = 1
+                camera_start = camera_offset[endpoint]
+                jacobian_pattern[-1, camera_start:camera_start + 6] = 1
 
         def residual(parameters):
             camera_r, camera_t, point_values = unpack(parameters)
@@ -283,9 +291,16 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
                 )
                 projected = projected.reshape(2)
                 values.extend(projected - pixel)
-            # Soft baseline gauge: preserve the initial first-edge baseline.
-            delta = camera_t[baseline_edge.right] - camera_t[baseline_edge.left]
-            values.append((np.linalg.norm(delta) - baseline_length) * 10.0)
+            # Soft scale gauge: preserve camera-centre distance, not the
+            # difference between world-to-camera translation vectors. The latter
+            # is not a world-space baseline when camera rotations differ.
+            left_center = _camera_center(
+                camera_r[baseline_edge.left], camera_t[baseline_edge.left]
+            )
+            right_center = _camera_center(
+                camera_r[baseline_edge.right], camera_t[baseline_edge.right]
+            )
+            values.append((np.linalg.norm(right_center - left_center) - baseline_length) * 10.0)
             return np.asarray(values, dtype=float)
 
         try:
