@@ -550,3 +550,53 @@ def test_object_only_result_includes_its_own_spatial_distribution(tmp_path, monk
     assert object_only["status"] == "complete"
     assert "spatial_distribution" in object_only
     assert object_only["spatial_distribution"]["raw_inlier_matches"] == object_only["inlier_matches"]
+
+
+def test_spatial_hash_dedup_matches_pairwise_reference_on_seeded_data():
+    import numpy as np
+    from types import SimpleNamespace
+
+    from app.api.routes.matching import _deduplicate_spatial_inliers
+    from app.engine.matching.models import DescriptorMatch
+
+    rng = np.random.default_rng(20261101)
+    left_points = []
+    right_points = []
+    matches = []
+    for index in range(180):
+        if index and index % 3:
+            source = int(rng.integers(0, len(left_points)))
+            left_base = left_points[source]
+            right_base = right_points[source]
+            left_point = tuple(
+                float(value) + float(rng.uniform(-4.9, 4.9)) for value in left_base
+            )
+            right_point = tuple(
+                float(value) + float(rng.uniform(-4.9, 4.9)) for value in right_base
+            )
+        else:
+            left_point = tuple(float(value) for value in rng.uniform(0, 1000, 2))
+            right_point = tuple(float(value) for value in rng.uniform(0, 1000, 2))
+        left_points.append(left_point)
+        right_points.append(right_point)
+        matches.append(DescriptorMatch(index, index, float(rng.uniform(0, 100))))
+
+    left = SimpleNamespace(keypoints=tuple(left_points))
+    right = SimpleNamespace(keypoints=tuple(right_points))
+    expected = []
+    for index in sorted(range(len(matches)), key=lambda item: (matches[item].distance, item)):
+        candidate_left = left.keypoints[index]
+        candidate_right = right.keypoints[index]
+        duplicate = False
+        for kept_index in expected:
+            kept_left = left.keypoints[kept_index]
+            kept_right = right.keypoints[kept_index]
+            left_d2 = sum((a - b) ** 2 for a, b in zip(candidate_left, kept_left))
+            right_d2 = sum((a - b) ** 2 for a, b in zip(candidate_right, kept_right))
+            if left_d2 <= 25.0 and right_d2 <= 25.0:
+                duplicate = True
+                break
+        if not duplicate:
+            expected.append(index)
+
+    assert _deduplicate_spatial_inliers(left, right, matches, range(len(matches))) == tuple(expected)
