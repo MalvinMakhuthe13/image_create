@@ -126,3 +126,21 @@ def test_automatic_mask_route_serves_cached_mask_only(tmp_path, monkeypatch):
     response = client.get(f"/api/v1/analysis/{analysis_id}/automatic-masks/0")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/png")
+
+
+
+def test_manual_mask_rejects_empty_and_full_foreground(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = uuid4()
+    folder = settings.upload_dir / str(analysis_id)
+    _make_upload(folder)
+    client = TestClient(app)
+
+    for value in (0, 255):
+        buffer = BytesIO()
+        Image.new("L", (64, 48), value).save(buffer, format="PNG")
+        response = client.put(
+            f"/api/v1/analysis/{analysis_id}/masks/0",
+            files={"file": ("mask.png", buffer.getvalue(), "image/png")},
+        )
+        assert response.status_code == 422
