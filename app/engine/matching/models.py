@@ -17,6 +17,7 @@ class ImageFeatures:
     scale_y: float
     camera_matrix: np.ndarray | None = None
     intrinsics_source: str | None = None
+    distortion_coefficients: np.ndarray | None = None
 
     @property
     def feature_count(self) -> int:
