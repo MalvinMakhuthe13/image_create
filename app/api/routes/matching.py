@@ -538,11 +538,42 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             )
             object_left = object_features[left_index]
             object_right = object_features[right_index]
-            object_matches = match_descriptors(
+            raw_object_matches = match_descriptors(
                 object_left, object_right,
                 ratio_threshold=0.86,
                 max_matches=6000,
             )
+            # Enforce the authoritative masks again at original-image keypoint
+            # coordinates. Detector masks constrain SIFT detection, while this
+            # second gate guarantees every correspondence passed to RANSAC has
+            # both endpoints inside the saved foreground masks.
+            object_matches = [
+                match for match in raw_object_matches
+                if _inside_both_manual_masks(
+                    object_left, object_right, match, left_mask, right_mask
+                )
+            ]
+            object_feature_mask_diagnostics = {
+                "left": {
+                    "detected_features": object_left.feature_count,
+                    "keypoints_inside_mask": sum(
+                        _point_inside_manual_mask(object_left, i, left_mask)
+                        for i in range(object_left.feature_count)
+                    ),
+                },
+                "right": {
+                    "detected_features": object_right.feature_count,
+                    "keypoints_inside_mask": sum(
+                        _point_inside_manual_mask(object_right, i, right_mask)
+                        for i in range(object_right.feature_count)
+                    ),
+                },
+                "raw_descriptor_matches": len(raw_object_matches),
+                "matches_with_both_endpoints_inside_masks": len(object_matches),
+                "rejected_for_mask_violation": len(raw_object_matches) - len(object_matches),
+                "ransac_input_matches": len(object_matches),
+                "enforcement": "both_keypoint_centres_must_be_inside_their_saved_manual_masks",
+            }
             object_result = verify_geometry(
                 object_left, object_right, object_matches
             )
@@ -562,6 +593,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     ),
                 },
                 "filtered_match_count": len(object_matches),
+                "feature_mask_diagnostics": object_feature_mask_diagnostics,
+                "raw_descriptor_match_count": len(raw_object_matches),
+                "baseline_mask_comparison": mask_filter_diagnostics,
                 "spatial_distribution": _spatial_distribution(
                     object_left, object_right, object_matches, object_result
                 ),
@@ -569,9 +603,8 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "mask_filter_diagnostics": {
                     **mask_filter_diagnostics,
                     "interpretation": (
-                        "Legacy baseline-descriptor filtering counts are retained for "
-                        "comparison; object-only results now come from independent "
-                        "mask-aware feature extraction."
+                        "Legacy all-scene descriptor comparison only. These counts do not "
+                        "describe the independent object-only descriptor population."
                     ),
                 },
                 "boundary_distance_diagnostics": summarize_mask_boundary_distances(
