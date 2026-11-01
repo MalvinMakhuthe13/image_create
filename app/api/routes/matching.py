@@ -645,13 +645,16 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         "coverage_assessment": {
             "status": "not_assessed",
             "reason": (
-                "Pairwise geometric connectivity does not estimate camera poses or prove "
-                "complete 3D surface coverage. Unchecked image pairs may contain additional links."
+                "Dense depth, fused surface geometry and occlusion-aware visibility are not "
+                "implemented. Sparse camera/landmark results, when available, do not establish "
+                "which object surfaces were observed or unseen."
             ),
         },
         "limitations": [
-            "This stage performs CPU feature matching and pairwise geometric verification only.",
-            "A verified pair is not a calibrated camera pose or a 3D reconstruction.",
+            "This endpoint performs CPU image matching and diagnostics, then attempts a separate "
+            "calibrated sparse multi-view reconstruction when supported pose edges are available.",
+            "Pairwise geometric inliers alone are not camera poses; sparse reconstruction remains "
+            "a prototype and may be unavailable for uncalibrated, planar, low-parallax or disconnected data.",
             "The bounded pair schedule can omit valid links between images that were not compared.",
             "Disconnected images may be caused by blur, lighting, viewpoint changes, or missing overlap.",
             "Diagnostic coordinates are 2D feature correspondences, not 3D points or surface coverage.",
