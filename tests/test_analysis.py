@@ -116,3 +116,25 @@ def test_sqlite_job_store_survives_store_reinstantiation(tmp_path):
     assert restored.status == "queued"
     assert restored.generation_mode == "verified"
     assert len(restarted_store) == 1
+
+def test_upload_reports_exif_oriented_dimensions_without_rewriting_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path)
+    image = Image.new("RGB", (64, 48), "white")
+    exif = image.getexif()
+    exif[274] = 6
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", exif=exif)
+    original = buffer.getvalue()
+
+    response = client.post(
+        "/api/v1/analysis/images",
+        files=[("files", ("rotated.jpg", original, "image/jpeg"))],
+    )
+
+    assert response.status_code == 200
+    asset = response.json()["images"][0]
+    assert asset["metrics"]["width"] == 48
+    assert asset["metrics"]["height"] == 64
+    stored = tmp_path / response.json()["analysis_id"] / asset["stored_filename"]
+    assert stored.read_bytes() == original
+
