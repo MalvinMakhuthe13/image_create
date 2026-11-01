@@ -15,6 +15,8 @@ class ImageFeatures:
     image_height: int
     scale_x: float
     scale_y: float
+    camera_matrix: np.ndarray | None = None
+    intrinsics_source: str | None = None
 
     @property
     def feature_count(self) -> int:
