@@ -56,7 +56,7 @@ See:
 
 ## Deployment security
 
-Development mode is intended for localhost. Outside development, the API fails closed unless
+Job metadata is stored in a local SQLite database, so queued records survive a single-host process restart. This is not a distributed worker queue; job execution, retries and multi-host coordination still need a worker service.\n\nDevelopment mode is intended for localhost. Outside development, the API fails closed unless
 `IMAGE_CREATE_API_KEY` is configured. Requests to `/api/v1/*` must include
 `X-API-Key: <configured value>`.
 
