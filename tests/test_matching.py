@@ -76,8 +76,6 @@ def test_geometry_reports_residuals_and_model_competition(tmp_path):
 
 
 def test_geometry_rejects_concentrated_correspondence_cluster():
-    from types import SimpleNamespace
-
     from app.engine.matching.geometric_verifier import verify_geometry
     from app.engine.matching.models import DescriptorMatch, ImageFeatures
 
