@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from threading import RLock
 from uuid import UUID
@@ -20,7 +21,7 @@ class PersistentJobStore:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS jobs (
@@ -30,6 +31,7 @@ class PersistentJobStore:
                 )
                 """
             )
+            connection.commit()
 
     def _connect(self):
         connection = sqlite3.connect(self.database_path, timeout=10)
@@ -39,7 +41,7 @@ class PersistentJobStore:
 
     def __setitem__(self, job_id: UUID, job: JobResponse) -> None:
         payload = job.model_dump_json()
-        with self._lock, self._connect() as connection:
+        with self._lock, closing(self._connect()) as connection:
             connection.execute(
                 """
                 INSERT INTO jobs (id, payload, updated_at)
@@ -50,9 +52,10 @@ class PersistentJobStore:
                 """,
                 (str(job_id), payload),
             )
+            connection.commit()
 
     def get(self, job_id: UUID, default=None):
-        with self._lock, self._connect() as connection:
+        with self._lock, closing(self._connect()) as connection:
             row = connection.execute(
                 "SELECT payload FROM jobs WHERE id = ?", (str(job_id),)
             ).fetchone()
