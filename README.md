@@ -14,12 +14,10 @@
 ## Quick start (Python 3.11+)
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-uvicorn app.main:app --reload
-pytest -q
+.\scripts\run_local.ps1
 ```
+
+For manual setup, create a Python 3.11+ virtual environment and install `-e ".[dev]"`.
 
 Browser Studio: http://127.0.0.1:8000/  
 API docs: http://127.0.0.1:8000/docs
