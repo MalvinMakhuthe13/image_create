@@ -8,5 +8,10 @@ __pycache__/
 !.env.example
 uploads/
 outputs/
+data/uploads/
+data/masks/
 *.py[cod]
 .DS_Store
+
+# Local durable job metadata
+data/jobs.sqlite3*
