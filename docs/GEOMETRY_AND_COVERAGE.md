@@ -70,3 +70,6 @@ When calibrated pairwise pose edges are available, the CPU sparse reconstruction
 5. Runs robust SciPy least-squares bundle adjustment over camera rotations, translations and 3D landmarks, fixing a reference camera and constraining one baseline to remove gauge freedom.
 
 This is an initial sparse global optimization, not a mature production SfM system. Component scales remain arbitrary; approximate EXIF intrinsics remain approximate; track association can contain errors; the bounded optimizer may stop before convergence. Inspect component status and reprojection residuals before trusting camera poses. No dense reconstruction or surface-coverage percentage is inferred.
+
+
+Pose-seeding safeguard: homography-selected or homography-dominant/planar-ambiguous pairs do not seed the global camera pose graph. Relative pose is attempted from fundamental-matrix inliers only. This intentionally reduces the number of usable pose edges rather than allowing planar or low-parallax ambiguity to contaminate the global reconstruction.
