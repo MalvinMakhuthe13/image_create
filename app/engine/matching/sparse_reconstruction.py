@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 from scipy.optimize import least_squares
+from scipy.sparse import lil_matrix
 from scipy.spatial.transform import Rotation
 
 from app.engine.matching.models import ImageFeatures
@@ -99,13 +100,17 @@ def _build_tracks(pair_rows, features):
             match = matches[match_index]
             union((i, match.query_index), (j, match.train_index))
 
-    tracks = defaultdict(dict)
+    tracks = defaultdict(list)
     for image_index, keypoint_index in list(parent):
-        tracks[find((image_index, keypoint_index))][image_index] = keypoint_index
-    return [
-        observations for observations in tracks.values()
-        if len(observations) >= 2
-    ]
+        tracks[find((image_index, keypoint_index))].append((image_index, keypoint_index))
+    valid_tracks = []
+    for rows in tracks.values():
+        image_ids = [image_id for image_id, _ in rows]
+        # Conflicting tracks with two detections in one photograph are rejected,
+        # not silently collapsed by overwriting one keypoint.
+        if len(rows) >= 2 and len(image_ids) == len(set(image_ids)):
+            valid_tracks.append(dict(rows))
+    return valid_tracks
 
 
 def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict],
@@ -246,6 +251,22 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
             point_values = parameters[point_offset:].reshape(-1, 3)
             return camera_r, camera_t, point_values
 
+        jacobian_pattern = lil_matrix(
+            (2 * len(flat_observations) + 1, len(x0)), dtype=np.int8
+        )
+        for row_index, (point_id, image_id, _) in enumerate(flat_observations):
+            if image_id != root:
+                camera_start = camera_offset[image_id]
+                jacobian_pattern[2 * row_index:2 * row_index + 2,
+                                 camera_start:camera_start + 6] = 1
+            point_start = point_offset + point_id * 3
+            jacobian_pattern[2 * row_index:2 * row_index + 2,
+                             point_start:point_start + 3] = 1
+        for endpoint in (baseline_edge.left, baseline_edge.right):
+            if endpoint != root:
+                camera_start = camera_offset[endpoint] + 3
+                jacobian_pattern[-1, camera_start:camera_start + 3] = 1
+
         def residual(parameters):
             camera_r, camera_t, point_values = unpack(parameters)
             values = []
@@ -271,6 +292,7 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
             optimized = least_squares(
                 residual, np.asarray(x0), loss="soft_l1", f_scale=2.0,
                 max_nfev=max_nfev, verbose=0,
+                jac_sparsity=jacobian_pattern.tocsr(), tr_solver="lsmr",
             )
             camera_r, camera_t, optimized_points = unpack(optimized.x)
             residual_values = residual(optimized.x)
