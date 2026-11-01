@@ -240,8 +240,8 @@ def test_subject_region_support_is_advisory_and_does_not_change_geometry():
 
 
 def test_classify_keypoints_uses_region_mask_coordinates():
+    import numpy as np
     from types import SimpleNamespace
-
 
     from app.engine.matching.subject_region import classify_keypoints
 
@@ -613,7 +613,6 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
     from app.api.routes.matching import _load_manual_mask
     from app.core.config import settings
     from uuid import uuid4
-    import numpy as np
 
     monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
     analysis_id = uuid4()
