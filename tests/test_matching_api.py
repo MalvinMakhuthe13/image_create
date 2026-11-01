@@ -603,3 +603,30 @@ def test_spatial_hash_dedup_matches_pairwise_reference_on_seeded_data():
             expected.append(index)
 
     assert _deduplicate_spatial_inliers(left, right, matches, range(len(matches))) == tuple(expected)
+
+def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch):
+    from PIL import Image
+    from app.api.routes.matching import _load_manual_mask
+    from app.core.config import settings
+    from uuid import uuid4
+    import numpy as np
+
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = uuid4()
+    image_dir = settings.upload_dir / str(analysis_id)
+    image_dir.mkdir(parents=True)
+    image_path = image_dir / "001_0123456789ab.jpg"
+    source = Image.new("RGB", (64, 48), "white")
+    exif = source.getexif()
+    exif[274] = 6
+    source.save(image_path, format="JPEG", exif=exif)
+
+    mask_path = tmp_path / "masks" / str(analysis_id) / "000.png"
+    mask_path.parent.mkdir(parents=True)
+    Image.new("L", (48, 64), 255).save(mask_path)
+
+    mask = _load_manual_mask(analysis_id, 0, image_path)
+    assert mask is not None
+    assert mask.shape == (64, 48)
+    assert bool(np.all(mask))
+
