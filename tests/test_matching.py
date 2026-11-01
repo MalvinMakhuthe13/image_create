@@ -268,3 +268,21 @@ def test_global_sparse_reconstruction_reports_unavailable_without_calibrated_edg
     assert result["status"] == "unavailable"
     assert result["reason"] == "no_calibrated_relative_pose_edges"
     assert result["coverage_assessment"]["status"] == "not_assessed"
+
+
+def test_feature_extractor_prefers_user_calibration_and_distortion(tmp_path):
+    import json
+
+    image_path = tmp_path / "calibrated.jpg"
+    Image.fromarray(texture(44, 640)).save(image_path)
+    calibration = {
+        "camera_matrix": [[800.0, 0.0, 320.0], [0.0, 805.0, 240.0], [0.0, 0.0, 1.0]],
+        "distortion_coefficients": [-0.1, 0.02, 0.0, 0.0, 0.0],
+        "image_width": 640,
+        "image_height": 480,
+    }
+    image_path.with_name(image_path.name + ".calibration.json").write_text(json.dumps(calibration))
+    features = extract_features(image_path, 0)
+    assert features.intrinsics_source == "user_supplied_calibration"
+    assert np.allclose(features.camera_matrix, calibration["camera_matrix"])
+    assert features.distortion_coefficients.shape == (5, 1)
