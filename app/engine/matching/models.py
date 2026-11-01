@@ -20,11 +20,13 @@ class ImageFeatures:
     def feature_count(self) -> int:
         return len(self.keypoints)
 
+
 @dataclass(frozen=True)
 class DescriptorMatch:
     query_index: int
     train_index: int
     distance: float
+
 
 @dataclass(frozen=True)
 class GeometryResult:
@@ -35,6 +37,7 @@ class GeometryResult:
     inlier_ratio: float
     median_reprojection_error_px: float | None
     reason: str
+    inlier_match_indices: tuple[int, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -8,5 +8,6 @@ __pycache__/
 !.env.example
 uploads/
 outputs/
+data/uploads/
 *.py[cod]
 .DS_Store

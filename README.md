@@ -13,7 +13,7 @@ experimental novel-view generation, validation, and controlled dataset export.
 ## Quick start (Python 3.11+)
 ```bash
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+# Windows: .venv\\Scripts\\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload
@@ -21,7 +21,12 @@ pytest
 ```
 API docs: http://127.0.0.1:8000/docs
 
-## Initial scope
-This starter implements the API foundation, typed job contracts, adaptive planner interface,
-health endpoint, and unit tests. It deliberately does not pretend that geometry reconstruction
-or image generation is already implemented.
+## CPU Image Analysis v1
+`POST /api/v1/analysis/images` accepts multiple JPEG, PNG, WebP, TIFF, and BMP photographs.
+It preserves original bytes locally and reports dimensions, basic EXIF metadata, heuristic
+sharpness/exposure metrics, SHA-256 exact duplicates, and perceptual-hash near-duplicates.
+
+This stage runs on CPU and does not require CUDA or a GPU. It does not yet estimate camera
+poses, geometric feature matches, camera overlap, missing viewpoints, or true 3D coverage.
+The upload endpoint is unauthenticated and intended for localhost development only.
+See `README_CPU_ANALYSIS.md` for setup and test instructions.

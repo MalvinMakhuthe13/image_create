@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "image-create"
-version = "0.1.0"
+version = "0.2.0"
 description = "FUMOCA Frame Intelligence standalone application"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,6 +13,10 @@ dependencies = [
   "pydantic>=2.8,<3",
   "pydantic-settings>=2.4,<3",
   "python-multipart>=0.0.9",
+  "Pillow>=10.4,<13",
+  "numpy>=1.26,<3",
+  "opencv-python-headless>=4.10,<5",
+
 ]
 
 [project.optional-dependencies]
