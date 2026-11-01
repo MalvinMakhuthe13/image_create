@@ -32,7 +32,7 @@ async def protect_non_development_api(request: Request, call_next):
             if not secrets.compare_digest(supplied, settings.api_key):
                 return JSONResponse(
                     status_code=401,
-                    content={"detail": "A valid X-API-Key header is required."},
+                    content={"detail": "A valid X-API-Key header or browser session is required."},
                     headers={"WWW-Authenticate": "ApiKey"},
                 )
     return await call_next(request)
