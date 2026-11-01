@@ -67,9 +67,15 @@ def estimate_relative_pose(
             projection_left, projection_right,
             left_normalized[pose_inliers].T, right_normalized[pose_inliers].T,
         )
-        points_3d = (homogeneous[:3] / np.maximum(homogeneous[3], 1e-12)).T
+        safe_w = np.where(np.abs(homogeneous[3]) > 1e-12, homogeneous[3], np.nan)
+        points_3d = (homogeneous[:3] / safe_w).T
         points_right = (rotation @ points_3d.T + translation).T
-        positive_depth = (points_3d[:, 2] > 0) & (points_right[:, 2] > 0)
+        positive_depth = (
+            np.isfinite(points_3d).all(axis=1)
+            & np.isfinite(points_right).all(axis=1)
+            & (points_3d[:, 2] > 0)
+            & (points_right[:, 2] > 0)
+        )
         triangulated = points_3d[positive_depth]
         if len(triangulated):
             left_projected = triangulated[:, :2] / triangulated[:, 2, None]
