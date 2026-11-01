@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+import cv2
 import numpy as np
 from PIL import Image
 from itertools import combinations
@@ -409,7 +410,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     max_features=settings.matching_max_features,
                 )
             )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, cv2.error) as exc:
         raise HTTPException(
             status_code=422,
             detail=f"Could not extract features from stored image: {exc}",
@@ -472,7 +473,13 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
 
     for left_index, right_index in pairs:
         left, right = features[left_index], features[right_index]
-        matches = match_descriptors(left, right)
+        try:
+            matches = match_descriptors(left, right)
+        except cv2.error as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"CPU descriptor matching failed for pair {left_index}-{right_index}: {exc}",
+            ) from exc
         result = verify_geometry(left, right, matches)
         verified_pairs.append((left_index, right_index, result))
         is_adjacent = right_index == left_index + 1
