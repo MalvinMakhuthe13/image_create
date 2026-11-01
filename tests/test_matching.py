@@ -397,3 +397,48 @@ def test_camera_pose_composition_inverts_reversed_relative_edge():
     assert np.allclose(reverse_rotations[1], rotation_01)
     assert np.allclose(reverse_translations[1], translation_01)
 
+
+
+def test_object_feature_extraction_is_masked_and_high_recall(tmp_path):
+    from app.engine.matching.feature_extractor import extract_features
+
+    rng = np.random.default_rng(20261101)
+    image = np.zeros((600, 800, 3), dtype=np.uint8)
+    # Textured foreground object region surrounded by a separately textured
+    # background, as in the cap-on-table capture.
+    image[130:490, 220:580] = rng.integers(
+        0, 256, (360, 360, 3), dtype=np.uint8
+    )
+    image[:120] = rng.integers(0, 256, image[:120].shape, dtype=np.uint8)
+    image[500:] = rng.integers(0, 256, image[500:].shape, dtype=np.uint8)
+    path = tmp_path / "masked-object.png"
+    Image.fromarray(image).save(path)
+    mask = np.zeros((600, 800), dtype=np.uint8)
+    mask[130:490, 220:580] = 255
+
+    baseline = extract_features(path, 0, max_dimension=800, max_features=3000)
+    object_features = extract_features(
+        path, 0, max_dimension=800, max_features=8000,
+        mask=mask, feature_profile="object",
+    )
+
+    assert object_features.feature_count > 0
+    assert object_features.descriptors is not None
+    assert len(object_features.descriptors) == object_features.feature_count
+    assert all(
+        130 <= y < 490 and 220 <= x < 580
+        for x, y in object_features.keypoints
+    )
+    assert object_features.feature_count <= 8000
+    assert baseline.feature_count > 0
+
+
+def test_masked_object_feature_extraction_rejects_wrong_mask_dimensions(tmp_path):
+    image = texture(2026, 320)
+    path = tmp_path / "object.png"
+    Image.fromarray(image).save(path)
+    with np.testing.assert_raises(ValueError):
+        extract_features(
+            path, 0, mask=np.ones((100, 100), dtype=np.uint8),
+            feature_profile="object",
+        )
