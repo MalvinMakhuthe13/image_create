@@ -520,14 +520,33 @@ def test_spatial_deduplication_handles_adjacent_hash_cells_and_exact_radius():
     assert _deduplicate_spatial_inliers(left, right, matches, (0, 1)) == (0,)
 
 
-def test_object_only_result_includes_its_own_spatial_distribution():
-    from io import BytesIO
+def test_object_only_result_includes_its_own_spatial_distribution(tmp_path, monkeypatch):
+    from pathlib import Path
 
-    from PIL import Image, ImageDraw
+    from PIL import Image
 
     from app.core.config import settings
 
-    # This contract is asserted through the matching endpoint; manual masks are
-    # not fabricated here, so the test instead ensures the field is present
-    # whenever a complete object-only result is returned by the route.
-    assert hasattr(settings, "max_matching_pair_checks")
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    upload_dir = settings.upload_dir
+    upload = client.post(
+        "/api/v1/analysis/images",
+        files=[
+            ("files", ("first.png", image_bytes(), "image/png")),
+            ("files", ("second.png", image_bytes(), "image/png")),
+        ],
+    )
+    assert upload.status_code == 200
+    analysis_id = upload.json()["analysis_id"]
+
+    mask_dir = Path(upload_dir).parent / "masks" / analysis_id
+    mask_dir.mkdir(parents=True)
+    for index in range(2):
+        Image.new("L", (640, 480), 255).save(mask_dir / f"{index:03d}.png")
+
+    response = client.post(f"/api/v1/analysis/{analysis_id}/matching")
+    assert response.status_code == 200
+    object_only = response.json()["pair_results"][0]["object_only"]
+    assert object_only["status"] == "complete"
+    assert "spatial_distribution" in object_only
+    assert object_only["spatial_distribution"]["raw_inlier_matches"] == object_only["inlier_matches"]

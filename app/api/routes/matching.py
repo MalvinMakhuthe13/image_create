@@ -75,7 +75,6 @@ def _mask_filter_diagnostics(left, right, matches, left_mask, right_mask) -> dic
     both_inside = 0
     left_only = 0
     right_only = 0
-    neither = 0
 
     for match in matches:
         in_left = _point_inside_manual_mask(left, match.query_index, left_mask)
@@ -85,7 +84,6 @@ def _mask_filter_diagnostics(left, right, matches, left_mask, right_mask) -> dic
         both_inside += int(in_left and in_right)
         left_only += int(in_left and not in_right)
         right_only += int(not in_left and in_right)
-        neither += int(not in_left and not in_right)
 
     total = len(matches)
     return {
