@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -101,6 +102,6 @@ async def analyse_images(files: list[UploadFile] = File(...)) -> dict:  # noqa: 
             ],
         }
     except Exception:
-        for temporary in folder.glob("*.upload"):
-            temporary.unlink(missing_ok=True)
+        # Make each multi-image upload atomic; remove partial files on failure.
+        shutil.rmtree(folder, ignore_errors=True)
         raise
