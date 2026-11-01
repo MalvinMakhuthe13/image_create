@@ -124,7 +124,12 @@ def estimate_relative_pose(
             ),
             "limitations": [
                 "Translation magnitude and metric scale are unknown.",
-                "No lens distortion model was available.",
+                (
+                    "Supplied lens distortion coefficients were used for point undistortion."
+                    if left.distortion_coefficients is not None
+                    or right.distortion_coefficients is not None
+                    else "No lens distortion coefficients were supplied; a pinhole-only model was used."
+                ),
                 "EXIF 35mm-equivalent focal length yields approximate intrinsics only.",
                 "Pairwise pose estimates require global pose-graph optimization before use as a camera trajectory.",
             ],
