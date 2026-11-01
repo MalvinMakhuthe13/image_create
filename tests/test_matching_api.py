@@ -80,7 +80,7 @@ def test_diagnostics_include_coordinates_and_pair_types(tmp_path, monkeypatch):
     assert "object_only" in pair
     assert "diagnostic_correspondences" in pair["object_only"]
     assert "dimensions" in body["images"][0]
-    assert body["images"][0]["manual_mask"]["status"] == "missing_or_invalid"
+    assert body["images"][0]["subject_mask"]["status"] == "missing_or_invalid"
     assert body["pair_results"][0]["object_only"]["mask_filter_diagnostics"]["status"] == "unavailable"
 
 def test_spatial_distribution_flags_concentrated_inliers():
@@ -321,8 +321,8 @@ def test_object_only_matching_requires_saved_manual_masks(tmp_path, monkeypatch)
     response = client.post(f"/api/v1/analysis/{analysis_id}/matching")
     assert response.status_code == 200
     pair = response.json()["pair_results"][0]
-    assert pair["object_only"]["status"] == "missing_manual_mask"
-    assert pair["object_only"]["reason"] == "manual_masks_required_for_both_images"
+    assert pair["object_only"]["status"] == "missing_automatic_or_manual_mask"
+    assert pair["object_only"]["reason"] == "accepted_automatic_or_manual_masks_required_for_both_images"
 
 
 
@@ -338,7 +338,7 @@ def test_object_only_reruns_geometry_using_saved_manual_masks(tmp_path, monkeypa
     analysis_id = upload.json()["analysis_id"]
     mask_dir = tmp_path.parent / "masks" / analysis_id
     mask_dir.mkdir(parents=True)
-    full_foreground = Image.new("L", (640, 480), 255)
+    full_foreground = Image.new("L", (640, 480), 0)\n    ImageDraw.Draw(full_foreground).rectangle((20, 20, 620, 460), fill=255)
     full_foreground.save(mask_dir / "000.png")
     full_foreground.save(mask_dir / "001.png")
 
@@ -625,10 +625,10 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
 
     mask_path = tmp_path / "masks" / str(analysis_id) / "000.png"
     mask_path.parent.mkdir(parents=True)
-    Image.new("L", (48, 64), 255).save(mask_path)
+    mask_image = Image.new("L", (48, 64), 0)\n    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_path)
 
     mask = _load_manual_mask(analysis_id, 0, image_path)
     assert mask is not None
     assert mask.shape == (64, 48)
-    assert bool(np.all(mask))
+    assert 0.0 < float(mask.mean()) < 1.0
 
