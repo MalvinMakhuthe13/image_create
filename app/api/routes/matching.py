@@ -618,7 +618,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         "processing": {
             "mode": "cpu_local",
             "gpu_required": False,
-            "feature_extractor": "SIFT",
+            "feature_extractor": "SIFT baseline + independent masked CLAHE-SIFT object pass",
             "pair_selection": "adjacent_frames_plus_evenly_sampled_pairs",
         },
         "summary": {
