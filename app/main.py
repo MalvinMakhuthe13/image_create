@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import secrets
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 
 from app.api.routes.analysis import router as analysis_router
@@ -13,6 +16,26 @@ app = FastAPI(
     version="0.2.0",
     description="Standalone FUMOCA Frame Intelligence API",
 )
+
+@app.middleware("http")
+async def protect_non_development_api(request: Request, call_next):
+    environment = settings.environment.lower()
+    if environment != "development":
+        if not settings.api_key:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "API is disabled: configure IMAGE_CREATE_API_KEY before non-development use."},
+            )
+        if request.url.path.startswith(settings.api_prefix):
+            supplied = request.headers.get("X-API-Key", "")
+            if not secrets.compare_digest(supplied, settings.api_key):
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "A valid X-API-Key header is required."},
+                    headers={"WWW-Authenticate": "ApiKey"},
+                )
+    return await call_next(request)
+
 
 app.include_router(health_router, prefix=settings.api_prefix)
 app.include_router(jobs_router, prefix=settings.api_prefix)
