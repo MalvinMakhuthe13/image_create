@@ -64,3 +64,40 @@ def test_matching_uses_accepted_automatic_masks_without_manual_painting(tmp_path
         assert hashlib.sha256(path.read_bytes()).hexdigest() == original_hash
     cached = settings.upload_dir.parent / "automatic_masks" / analysis_id / "000.png"
     assert cached.is_file()
+
+
+
+def test_low_confidence_fallback_is_not_used_for_object_only_ransac(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = "2a5b4e3f-6c7d-4b8a-9c1d-0e2f3a4b5c6d"
+    folder = settings.upload_dir / analysis_id
+    folder.mkdir(parents=True)
+    first = _textured_image(seed=13)
+    second = cv2.warpAffine(
+        first, cv2.getRotationMatrix2D((360, 360), 2, 1.0), (720, 720)
+    )
+    for index, image in enumerate((first, second), start=1):
+        Image.fromarray(image).save(
+            folder / f"{index:03d}_{index:012x}.png"
+        )
+
+    def low_confidence_fallback(image_path):
+        return {
+            "status": "low_confidence",
+            "method": "grabcut_heuristic_fallback",
+            "mask": np.full((720, 720), 255, dtype=np.uint8),
+            "plausible": True,
+            "foreground_fraction": 1.0,
+        }
+
+    monkeypatch.setattr(
+        matching_route, "generate_subject_mask", low_confidence_fallback
+    )
+    response = TestClient(app).post(
+        f"/api/v1/analysis/{analysis_id}/matching"
+    )
+    assert response.status_code == 200, response.text
+    pair = response.json()["pair_results"][0]
+    assert pair["object_only"]["status"] == "missing_automatic_or_manual_mask"
+    assert pair["object_only"]["mask_sources"] == ["unavailable", "unavailable"]
+    assert pair["verified"] in (True, False)  # all-scene geometry remains independent
