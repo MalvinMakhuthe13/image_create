@@ -2,7 +2,7 @@ from io import BytesIO
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.core.config import settings
 from app.main import app
@@ -84,7 +84,7 @@ def test_mask_and_calibration_dimensions_follow_exif_orientation(tmp_path, monke
 
     client = TestClient(app)
     mask_bytes = BytesIO()
-    Image.new("L", (48, 64), 255).save(mask_bytes, format="PNG")
+    mask_image = Image.new("L", (48, 64), 0)\n    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_bytes, format="PNG")
     saved_mask = client.put(
         f"/api/v1/analysis/{analysis_id}/masks/0",
         files={"file": ("mask.png", mask_bytes.getvalue(), "image/png")},
