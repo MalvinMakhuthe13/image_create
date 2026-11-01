@@ -62,4 +62,4 @@ def test_saved_mask_is_separate_atomic_png(tmp_path):
     with Image.open(target) as saved:
         assert saved.mode == "L"
         assert np.array_equal(np.asarray(saved), mask)
-    assert not target.with_suffix(".tmp.png").exists()
+    assert not list(target.parent.glob(".*.tmp.png"))
