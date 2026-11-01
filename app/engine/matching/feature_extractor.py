@@ -35,7 +35,7 @@ def extract_features(image_path: Path, image_index: int, *, max_dimension: int =
             calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
             matrix = np.asarray(calibration["camera_matrix"], dtype=np.float64)
             distortion = np.asarray(calibration.get("distortion_coefficients", []), dtype=np.float64)
-            if matrix.shape == (3, 3) and np.isfinite(matrix).all() and matrix[0, 0] > 0 and matrix[1, 1] > 0:
+            if (matrix.shape == (3, 3) and np.isfinite(matrix).all() and matrix[0, 0] > 0 and matrix[1, 1] > 0 and calibration.get("image_width") == source_width and calibration.get("image_height") == source_height):
                 camera_matrix = matrix
                 distortion_coefficients = distortion.reshape(-1, 1) if distortion.size else None
                 intrinsics_source = "user_supplied_calibration"
