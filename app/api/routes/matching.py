@@ -4,7 +4,7 @@ import re
 
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from itertools import combinations
 from pathlib import Path
 from uuid import UUID
@@ -45,7 +45,7 @@ def _load_manual_mask(analysis_id: UUID, image_index: int, image_path: Path):
             source.load()
             mask = np.asarray(source.convert("L"), dtype=np.uint8) >= 128
         with Image.open(image_path) as source:
-            width, height = source.size
+            width, height = ImageOps.exif_transpose(source).size
     except (OSError, ValueError):
         return None
     return mask if mask.shape == (height, width) else None
