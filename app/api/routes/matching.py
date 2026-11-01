@@ -51,7 +51,12 @@ def _load_manual_mask(analysis_id: UUID, image_index: int, image_path: Path):
             width, height = ImageOps.exif_transpose(source).size
     except (OSError, ValueError):
         return None
-    return mask if mask.shape == (height, width) else None
+    if mask.shape != (height, width):
+        return None
+    foreground_fraction = float(mask.mean())
+    if not 0.005 <= foreground_fraction <= 0.98:
+        return None
+    return mask
 
 
 def _point_inside_manual_mask(image, keypoint_index, mask) -> bool:
