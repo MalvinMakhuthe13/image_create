@@ -39,6 +39,9 @@ def test_matching_endpoint_handles_single_image_without_pairs(tmp_path, monkeypa
     assert body["summary"]["pairs_evaluated"] == 0
     assert body["connectivity"]["components"] == [[0]]
     assert body["coverage_assessment"]["status"] == "not_assessed"
+    assert "Dense depth" in body["coverage_assessment"]["reason"]
+    assert "sparse_reconstruction" in body
+    assert any("sparse multi-view reconstruction" in item for item in body["limitations"])
 
 
 def test_matching_endpoint_returns_404_for_unknown_analysis(tmp_path, monkeypatch):
