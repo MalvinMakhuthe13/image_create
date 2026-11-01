@@ -9,7 +9,7 @@ from uuid import UUID
 import numpy as np
 from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 from fastapi.responses import FileResponse, HTMLResponse, Response
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.core.config import settings
 
@@ -70,7 +70,7 @@ def save_camera_calibration(analysis_id: UUID, image_index: int, calibration: di
     if distortion.size not in {0, 4, 5, 8, 12, 14} or not np.isfinite(distortion).all():
         raise HTTPException(status_code=422, detail="OpenCV distortion coefficients must contain 0, 4, 5, 8, 12 or 14 finite values")
     with Image.open(paths[image_index]) as source:
-        width, height = source.size
+        width, height = ImageOps.exif_transpose(source).size
     if not (0 <= matrix[0, 2] < width and 0 <= matrix[1, 2] < height):
         raise HTTPException(status_code=422, detail="Principal point must fall within the source image")
     payload = {
@@ -122,7 +122,7 @@ async def save_manual_mask(
     except Exception as exc:
         raise HTTPException(status_code=422, detail="Uploaded mask is not a valid image") from exc
     with Image.open(paths[image_index]) as source:
-        expected_size = source.size
+        expected_size = ImageOps.exif_transpose(source).size
     if mask.size != expected_size:
         raise HTTPException(
             status_code=422,
