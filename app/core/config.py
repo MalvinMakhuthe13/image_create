@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     matching_max_dimension: int = 1200
     matching_max_features: int = 3000
     upload_dir: Path = Path("data/uploads")
+    api_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
