@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import warnings
 from pathlib import Path
 from uuid import UUID
 
@@ -115,14 +116,24 @@ async def save_manual_mask(
     raw = await file.read()
     if len(raw) > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Mask exceeds 25 MB")
-    try:
-        with Image.open(io.BytesIO(raw)) as source:
-            source.load()
-            mask = source.convert("L")
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="Uploaded mask is not a valid image") from exc
     with Image.open(paths[image_index]) as source:
         expected_size = ImageOps.exif_transpose(source).size
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(raw)) as source:
+                # Reject mismatched dimensions before decoding pixel data.
+                if source.size != expected_size:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Mask dimensions do not match the oriented source image",
+                    )
+                source.load()
+                mask = source.convert("L")
+    except HTTPException:
+        raise
+    except (OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(status_code=422, detail="Uploaded mask is not a valid safe image") from exc
     if mask.size != expected_size:
         raise HTTPException(
             status_code=422,
