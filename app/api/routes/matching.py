@@ -22,7 +22,6 @@ from app.engine.matching import (
 )
 from app.engine.matching.subject_region import (
     classify_keypoints,
-    estimate_subject_region,
     pair_subject_support,
 )
 from app.engine.matching.automatic_segmentation import (
@@ -421,48 +420,10 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             detail=f"Could not extract features from stored image: {exc}",
         ) from exc
 
-    # Automatic foreground proposals are deliberately advisory. They are
-    # computed once per image and never participate in RANSAC or graph edges.
-    subject_regions = []
-    subject_summaries = []
-    for index, image_path in enumerate(image_paths):
-        manual_mask_path = (
-            Path(settings.upload_dir).parent / "masks" / str(analysis_id) / f"{index:03d}.png"
-        )
-        if manual_mask_path.is_file():
-            with Image.open(manual_mask_path) as source:
-                manual_mask = (np.asarray(source.convert("L"), dtype=np.uint8) >= 128).astype(np.uint8)
-            with Image.open(image_path) as source:
-                image_width, image_height = source.size
-            region = {
-                "status": "manual",
-                "reason": "user_supplied_binary_object_mask",
-                "width": image_width,
-                "height": image_height,
-                "mask_width": int(manual_mask.shape[1]),
-                "mask_height": int(manual_mask.shape[0]),
-                "foreground_fraction": round(float(manual_mask.mean()), 4),
-                "mask": manual_mask,
-            }
-        else:
-            region = estimate_subject_region(image_path)
-        classified = classify_keypoints(features[index], region)
-        classified["mask"] = region.get("mask")
-        classified["width"] = region.get("width")
-        classified["height"] = region.get("height")
-        subject_regions.append(classified)
-        subject_summaries.append({
-            "image_index": index,
-            "filename": image_path.name,
-            "segmentation": {
-                key: value for key, value in region.items()
-                if key != "mask"
-            },
-            "keypoint_region_summary": {
-                key: value for key, value in classified.items()
-                if key not in {"labels", "mask"}
-            },
-        })
+    # Subject-region support is populated below from the exact accepted mask
+    # used for object-only extraction; no separate GrabCut proposal is needed.
+    subject_regions = [None] * len(image_paths)
+    subject_summaries = [None] * len(image_paths)
 
     # Manual masks take precedence. Otherwise use a cached/generated U2-Net mask.
     # Heuristic GrabCut proposals remain advisory and are NOT silently promoted
@@ -523,29 +484,40 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
     # mask that object-only feature extraction actually uses, not the old
     # advisory GrabCut proposal computed earlier.
     for index, mask in enumerate(manual_masks):
-        if mask is None:
-            continue
         with Image.open(image_paths[index]) as source:
             oriented_size = ImageOps.exif_transpose(source).size
-        region = {
-            "status": mask_sources[index],
-            "reason": "manual_override" if mask_sources[index] == "manual" else "accepted_u2net_mask",
-            "width": oriented_size[0],
-            "height": oriented_size[1],
-            "mask": np.asarray(mask, dtype=np.uint8),
-            "foreground_fraction": round(float(mask.mean()), 5),
-        }
+        if mask is None:
+            region = {
+                "status": "unavailable",
+                "reason": "no_accepted_model_mask_or_manual_override",
+                "width": oriented_size[0],
+                "height": oriented_size[1],
+                "mask": None,
+            }
+        else:
+            region = {
+                "status": mask_sources[index],
+                "reason": "manual_override" if mask_sources[index] == "manual" else "accepted_u2net_mask",
+                "width": oriented_size[0],
+                "height": oriented_size[1],
+                "mask": np.asarray(mask, dtype=np.uint8),
+                "foreground_fraction": round(float(mask.mean()), 5),
+            }
         classified = classify_keypoints(features[index], region)
         classified["mask"] = region["mask"]
         classified["width"] = region["width"]
         classified["height"] = region["height"]
         subject_regions[index] = classified
-        subject_summaries[index]["segmentation"] = {
-            key: value for key, value in region.items() if key != "mask"
-        }
-        subject_summaries[index]["keypoint_region_summary"] = {
-            key: value for key, value in classified.items()
-            if key not in {"labels", "mask"}
+        subject_summaries[index] = {
+            "image_index": index,
+            "filename": image_paths[index].name,
+            "segmentation": {
+                key: value for key, value in region.items() if key != "mask"
+            },
+            "keypoint_region_summary": {
+                key: value for key, value in classified.items()
+                if key not in {"labels", "mask"}
+            },
         }
 
     # Object-only extraction is independent of the all-scene baseline. The
