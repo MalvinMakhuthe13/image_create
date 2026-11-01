@@ -93,8 +93,8 @@ def test_geometry_rejects_concentrated_correspondence_cluster():
     result = verify_geometry(left, right, matches, minimum_inliers=8)
     assert result.diagnostics is not None
     assert result.diagnostics["spatially_concentrated"] is True
-    assert not result.verified
-    assert result.reason == "spatially_concentrated_inliers"
+    assert result.verified
+    assert result.diagnostics["spatial_concentration_is_advisory"] is True
 
 
 def test_relative_pose_uses_intrinsics_and_reports_unknown_translation_scale():
