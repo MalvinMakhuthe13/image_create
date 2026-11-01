@@ -80,7 +80,7 @@ def test_diagnostics_include_coordinates_and_pair_types(tmp_path, monkeypatch):
     assert "object_only" in pair
     assert "diagnostic_correspondences" in pair["object_only"]
     assert "dimensions" in body["images"][0]
-    assert body["images"][0]["subject_mask"]["status"] == "missing_or_invalid"
+    assert body["images"][0]["subject_mask"]["status"] == "unavailable"
     assert body["pair_results"][0]["object_only"]["mask_filter_diagnostics"]["status"] == "unavailable"
 
 def test_spatial_distribution_flags_concentrated_inliers():
