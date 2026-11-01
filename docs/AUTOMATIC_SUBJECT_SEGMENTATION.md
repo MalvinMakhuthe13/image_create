@@ -10,7 +10,7 @@ Install the optional model dependencies:
 python -m pip install -e ".[dev,segmentation]"
 ```
 
-The first model inference may download U2-Net weights and can take longer than subsequent images. The inference session is reused within the worker process. CPU inference is supported; no CUDA/GPU is required.
+The first model inference may download U2-Net weights and can take longer than subsequent images. The inference session is reused within the worker process. CPU inference is supported; no CUDA/GPU is required. The code explicitly requests the `u2net` model rather than rembg's current default: rembg documents that model weights have separate licences and its default BRIA RMBG model requires a paid commercial agreement. U²-Net's upstream repository publishes an Apache-2.0 licence; retain the upstream notices and verify the exact weight-distribution terms before commercial release. See the [rembg model and licence notes](https://github.com/danielgatis/rembg#models) and [U²-Net repository](https://github.com/xuebinqin/U-2-Net).
 
 ## Safety and fallback rules
 
