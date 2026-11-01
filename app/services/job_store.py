@@ -64,7 +64,7 @@ class PersistentJobStore:
         return JobResponse.model_validate_json(row[0])
 
     def __len__(self) -> int:
-        with self._lock, self._connect() as connection:
+        with self._lock, closing(self._connect()) as connection:
             row = connection.execute("SELECT COUNT(*) FROM jobs").fetchone()
         return int(row[0])
 
