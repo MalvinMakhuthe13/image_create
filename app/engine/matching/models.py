@@ -38,6 +38,7 @@ class GeometryResult:
     median_reprojection_error_px: float | None
     reason: str
     inlier_match_indices: tuple[int, ...] = ()
+    diagnostics: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
