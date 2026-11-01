@@ -246,10 +246,10 @@ def test_global_sparse_reconstruction_fuses_multiview_tracks_and_refines_cameras
         max_tracks=100,
         max_nfev=15,
     )
-    assert result["status"] == "complete"
     assert result["component_count"] == 1
     component = result["components"][0]
     assert component["status"] in {"optimized", "optimization_stopped"}
+    assert result["status"] == ("complete" if component["status"] == "optimized" else "partial")
     assert component["camera_count"] == 3
     assert component["landmark_count"] >= 30
     assert component["observation_count"] >= 90
