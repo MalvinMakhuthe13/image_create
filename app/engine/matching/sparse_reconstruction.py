@@ -173,8 +173,8 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
             ka, kb = track[a], track[b]
             pa = np.asarray(fa.keypoints[ka], dtype=float)
             pb = np.asarray(fb.keypoints[kb], dtype=float)
-            na = cv2.undistortPoints(pa.reshape(1, 1, 2), fa.camera_matrix, None).reshape(2)
-            nb = cv2.undistortPoints(pb.reshape(1, 1, 2), fb.camera_matrix, None).reshape(2)
+            na = cv2.undistortPoints(pa.reshape(1, 1, 2), fa.camera_matrix, fa.distortion_coefficients).reshape(2)
+            nb = cv2.undistortPoints(pb.reshape(1, 1, 2), fb.camera_matrix, fb.distortion_coefficients).reshape(2)
             projection_a = np.hstack((rotations[a], translations[a].reshape(3, 1)))
             projection_b = np.hstack((rotations[b], translations[b].reshape(3, 1)))
             homogeneous = cv2.triangulatePoints(
@@ -254,8 +254,13 @@ def reconstruct_sparse_scene(features: list[ImageFeatures], pair_rows: list[dict
                 if point_camera[2] <= 1e-6:
                     values.extend([1000.0, 1000.0])
                     continue
-                projected = features[image_id].camera_matrix @ point_camera
-                projected = projected[:2] / projected[2]
+                projected, _ = cv2.projectPoints(
+                    point_camera.reshape(1, 1, 3),
+                    np.zeros(3), np.zeros(3),
+                    features[image_id].camera_matrix,
+                    features[image_id].distortion_coefficients,
+                )
+                projected = projected.reshape(2)
                 values.extend(projected - pixel)
             # Soft baseline gauge: preserve the initial first-edge baseline.
             delta = camera_t[baseline_edge.right] - camera_t[baseline_edge.left]
