@@ -3,17 +3,17 @@
 The visual inspection workspace supports two separate correspondence modes:
 
 - **All-scene baseline**: the original SIFT descriptor matching and geometric verification. The existing connectivity graph continues to use this result.
-- **Object-only (manual-mask)**: descriptor matches are first generated using the existing all-scene feature matching process. A match is eligible for object-only geometric verification only when BOTH original-image keypoint endpoints fall inside their respective saved manual foreground masks.
+- **Object-only (automatic subject mask)**: masked CLAHE-SIFT features are extracted independently inside each accepted U2-Net automatic mask, unless a user-supplied manual correction exists. A match is eligible only when BOTH original-image keypoint endpoints fall inside their respective accepted masks.
 
-## Manual masks
+## Automatic masks and optional manual corrections
 
 Manual masks use white for object foreground and black for background. Each saved mask must match its source image dimensions.
 
-A valid saved manual mask is required for both images in a pair. If either mask is missing or invalid, object-only verification reports `missing_manual_mask`. There is no automatic GrabCut fallback in this workflow.
+Install the optional segmentation dependencies with `python -m pip install -e ".[dev,segmentation]"`. U2-Net runs through ONNX Runtime's CPU provider and generated masks are cached separately from source images. Manual masks override generated masks. If the model is unavailable, GrabCut is reported as a low-confidence heuristic and is not accepted for object-only RANSAC. If either image has no accepted automatic or manual mask, object-only verification reports `missing_automatic_or_manual_mask`. See `docs/AUTOMATIC_SUBJECT_SEGMENTATION.md` for setup, quality diagnostics and limitations.
 
 ## Mask boundary-distance diagnostics
 
-For pairs with two valid manual masks, the system also measures how far excluded descriptor-match endpoints lie from the nearest foreground pixel.
+For pairs with two valid accepted masks, the system also measures how far excluded descriptor-match endpoints lie from the nearest foreground pixel.
 
 Distances are calculated independently for the left and right images using OpenCV's precise Euclidean distance transform. The correspondence-level histogram counts a correspondence once, using the smaller measurable distance of its two endpoints.
 
