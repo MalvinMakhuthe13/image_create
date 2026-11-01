@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     matching_max_dimension: int = 1200
     matching_max_features: int = 3000
     upload_dir: Path = Path("data/uploads")
-    api_key: str | None = None
+    api_key: str | None = Field(default=None, validation_alias="IMAGE_CREATE_API_KEY")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
