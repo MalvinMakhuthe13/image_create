@@ -50,4 +50,4 @@ jobs:
         env:
           IMAGE_CREATE_RUN_MODEL_SMOKE: "1"
           OMP_NUM_THREADS: "2"
-        run: python -m pytest -q tests/test_automatic_segmentation.py -k real_u2net_model_smoke
+        run: python -m pytest -q tests/test_automatic_segmentation.py -k real_u2net_model_runs
