@@ -102,6 +102,18 @@ def get_manual_mask(analysis_id: UUID, image_index: int) -> Response:
     return FileResponse(target, media_type="image/png")
 
 
+@router.get("/{analysis_id}/automatic-masks/{image_index}")
+def get_automatic_mask(analysis_id: UUID, image_index: int) -> Response:
+    """Return the cached model-generated mask; never create a heuristic mask here."""
+    paths = _images(analysis_id)
+    if image_index < 0 or image_index >= len(paths):
+        raise HTTPException(status_code=404, detail="Image index was not found")
+    target = Path(settings.upload_dir).parent / "automatic_masks" / str(analysis_id) / f"{image_index:03d}.png"
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="No accepted automatic model mask is available; run matching with the segmentation extra installed")
+    return FileResponse(target, media_type="image/png")
+
+
 @router.put("/{analysis_id}/masks/{image_index}")
 async def save_manual_mask(
     analysis_id: UUID,
@@ -168,7 +180,7 @@ INSPECTION_HTML = r'''<!doctype html>
 <section id="matchesPanel" class="panel"><h2>Geometric correspondences</h2><div class="toolbar"><button class="primary" id="runMatching">Run / refresh matching</button><label>Image pair <select id="pairSelect"><option>Run matching first</option></select></label><label>Correspondences <select id="correspondenceMode"><option value="all">All-scene baseline</option><option value="object" selected>Object-only (manual masks)</option></select></label><label><input type="checkbox" id="showOutliers" checked> Show non-inliers</label></div>
 <div id="resultSummary" class="result-summary"></div><div class="legend"><span><i class="dot" style="background:#39df8c"></i>RANSAC inlier</span><span><i class="dot" style="background:#ff6464"></i>RANSAC-tested outlier</span><span><i class="dot" style="background:#f2b84b"></i>Unverified candidate</span></div>
 <div class="canvasbox"><canvas id="pairCanvas"></canvas></div><p class="hint">Green = RANSAC inlier; red = candidate tested and rejected by a fitted RANSAC model; amber = unverified because no usable model was fitted. Object-only mode independently reruns RANSAC using descriptor matches whose two endpoints are inside the saved manual masks. The all-scene baseline and its connectivity graph remain separate.</p></section>
-<section id="maskPanel" class="panel hidden"><h2>Manual object mask editor</h2><div class="grid"><div><div class="toolbar"><label>Image <select id="maskImage"></select></label><button id="loadMask">Load saved mask</button><button id="clearMask">Clear mask</button></div><div class="canvasbox"><canvas id="maskCanvas"></canvas></div></div><aside><div class="toolbar"><button class="active" id="paintTool">Paint object</button><button id="eraseTool">Erase</button></div><label>Brush size <input id="brushSize" type="range" min="3" max="120" value="28"></label><p class="hint">Paint white over the actual object. Erase areas that are table, floor, reflections or background. You can zoom the browser to work on details. White = object; black = background.</p><button class="primary" id="saveMask">Save mask</button><p class="hint">Masks are stored locally beside this analysis, not uploaded to a cloud service. Save at the source image's exact dimensions.</p></aside></div></section>
+<section id="maskPanel" class="panel hidden"><h2>Automatic subject mask review · optional manual correction</h2><div class="grid"><div><div class="toolbar"><label>Image <select id="maskImage"></select></label><button id="loadMask">Load saved mask</button><button id="clearMask">Clear mask</button></div><div class="canvasbox"><canvas id="maskCanvas"></canvas></div></div><aside><div class="toolbar"><button class="active" id="paintTool">Paint object</button><button id="eraseTool">Erase</button></div><label>Brush size <input id="brushSize" type="range" min="3" max="120" value="28"></label><p class="hint">Review the automatically generated subject mask first. Paint or erase only when a correction is genuinely needed. You can zoom the browser to work on details. White = object; black = background.</p><button class="primary" id="saveMask">Save mask</button><p class="hint">Masks are stored locally beside this analysis, not uploaded to a cloud service. Save at the source image's exact dimensions.</p></aside></div></section>
 </div>
 <script>
 const id='__ANALYSIS_ID__', api='/api/v1/analysis/'+id;
