@@ -195,3 +195,76 @@ def test_feature_extractor_uses_exif_35mm_equivalent_as_approximate_intrinsics(t
     assert features.intrinsics_source == "exif_35mm_equivalent_approximation"
     assert features.camera_matrix.shape == (3, 3)
     assert features.camera_matrix[0, 0] > 0
+
+
+def test_global_sparse_reconstruction_fuses_multiview_tracks_and_refines_cameras():
+    from app.engine.matching.models import DescriptorMatch, ImageFeatures
+    from app.engine.matching.sparse_reconstruction import reconstruct_sparse_scene
+
+    rng = np.random.default_rng(91)
+    points = np.column_stack((
+        rng.uniform(-1.0, 1.0, 36),
+        rng.uniform(-0.7, 0.7, 36),
+        rng.uniform(4.0, 7.0, 36),
+    ))
+    camera = np.array([[700.0, 0, 320.0], [0, 700.0, 240.0], [0, 0, 1.0]])
+    translations = [np.array([0.0, 0.0, 0.0]), np.array([-0.7, 0.0, 0.0]), np.array([-1.4, 0.0, 0.0])]
+    feature_sets = []
+    for image_index, translation in enumerate(translations):
+        camera_points = points + translation
+        pixels_h = (camera @ camera_points.T).T
+        pixels = pixels_h[:, :2] / pixels_h[:, 2, None]
+        feature_sets.append(ImageFeatures(
+            image_index=image_index,
+            keypoints=tuple(map(tuple, pixels)),
+            descriptors=None,
+            image_width=640,
+            image_height=480,
+            scale_x=1.0,
+            scale_y=1.0,
+            camera_matrix=camera,
+            intrinsics_source="test_calibration",
+        ))
+
+    def edge(left, right, tx):
+        matches = [DescriptorMatch(i, i, 0.1) for i in range(len(points))]
+        return {
+            "image_indices": [left, right],
+            "_matches": matches,
+            "_inliers": tuple(range(len(matches))),
+            "pose": {
+                "status": "estimated",
+                "rotation_matrix_left_to_right": np.eye(3).tolist(),
+                "translation_direction_left_to_right": [tx, 0.0, 0.0],
+                "pose_inlier_count": len(matches),
+            },
+        }
+
+    result = reconstruct_sparse_scene(
+        feature_sets,
+        [edge(0, 1, -1.0), edge(1, 2, -1.0), edge(0, 2, -1.0)],
+        max_tracks=100,
+        max_nfev=15,
+    )
+    assert result["status"] == "complete"
+    assert result["component_count"] == 1
+    component = result["components"][0]
+    assert component["status"] in {"optimized", "optimization_stopped"}
+    assert component["camera_count"] == 3
+    assert component["landmark_count"] >= 30
+    assert component["observation_count"] >= 90
+    assert component["coverage_claim"] == "sparse_landmarks_only_not_dense_surface_coverage"
+
+
+def test_global_sparse_reconstruction_reports_unavailable_without_calibrated_edges():
+    from app.engine.matching.models import ImageFeatures
+    from app.engine.matching.sparse_reconstruction import reconstruct_sparse_scene
+
+    features = [
+        ImageFeatures(i, (), None, 100, 100, 1.0, 1.0)
+        for i in range(2)
+    ]
+    result = reconstruct_sparse_scene(features, [])
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "no_calibrated_relative_pose_edges"
+    assert result["coverage_assessment"]["status"] == "not_assessed"
