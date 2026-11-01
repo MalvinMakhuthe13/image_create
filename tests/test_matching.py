@@ -132,6 +132,9 @@ def test_relative_pose_uses_intrinsics_and_reports_unknown_translation_scale():
     assert pose["status"] == "estimated"
     assert pose["pose_inlier_count"] >= 70
     assert pose["translation_scale"] == "unknown_monocular_scale"
+    assert pose["sparse_triangulation"]["status"] == "estimated"
+    assert pose["sparse_triangulation"]["triangulated_point_count"] >= 70
+    assert pose["sparse_triangulation"]["coverage_claim"] == "sparse_pairwise_points_only_not_dense_surface_coverage"
     assert pose["calibration_quality"] == "user_or_external_calibration"
 
 
