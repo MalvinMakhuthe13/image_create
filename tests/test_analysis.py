@@ -46,3 +46,16 @@ def test_upload_rejects_corrupt_image(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
     response = client.post("/api/v1/analysis/images", files=[("files", ("broken.png", b"not png", "image/png"))])
     assert response.status_code == 400
+
+
+def test_failed_multi_image_upload_removes_partial_analysis_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path)
+    response = client.post(
+        "/api/v1/analysis/images",
+        files=[
+            ("files", ("valid.png", png_bytes(), "image/png")),
+            ("files", ("broken.png", b"not an image", "image/png")),
+        ],
+    )
+    assert response.status_code == 400
+    assert list(tmp_path.iterdir()) == []
