@@ -55,3 +55,40 @@ def test_graph_components():
     assert graph["components"] == [[0, 1, 2], [3]]
     assert graph["isolated_image_indices"] == [3]
     assert graph["verified_edge_count"] == 2
+
+
+def test_geometry_reports_residuals_and_model_competition(tmp_path):
+    first = texture(41)
+    transform = cv2.getRotationMatrix2D((360, 360), 4, 1.0)
+    transform[0, 2] += 12
+    second = cv2.warpAffine(first, transform, (720, 720))
+    p1, p2 = tmp_path / "geometry-a.png", tmp_path / "geometry-b.png"
+    Image.fromarray(first).save(p1)
+    Image.fromarray(second).save(p2)
+    left, right = extract_features(p1, 0), extract_features(p2, 1)
+    result = verify_geometry(left, right, match_descriptors(left, right))
+    assert result.diagnostics is not None
+    assert result.diagnostics["model_status"] == "estimated"
+    assert result.diagnostics["candidate_inlier_counts"]["fundamental"] >= 0
+    assert result.diagnostics["candidate_inlier_counts"]["homography"] >= 0
+    assert result.diagnostics["selected_model"] == result.model
+    assert result.median_reprojection_error_px is not None
+
+
+def test_geometry_rejects_concentrated_correspondence_cluster():
+    from types import SimpleNamespace
+
+    from app.engine.matching.geometric_verifier import verify_geometry
+    from app.engine.matching.models import DescriptorMatch, ImageFeatures
+
+    points = tuple((float(100 + i % 4), float(100 + i // 4)) for i in range(40))
+    shifted = tuple((x + 8.0, y + 5.0) for x, y in points)
+    descriptors = np.ones((40, 128), dtype=np.float32)
+    left = ImageFeatures(0, points, descriptors, 1000, 1000, 1.0, 1.0)
+    right = ImageFeatures(1, shifted, descriptors, 1000, 1000, 1.0, 1.0)
+    matches = [DescriptorMatch(i, i, float(i)) for i in range(40)]
+    result = verify_geometry(left, right, matches, minimum_inliers=8)
+    assert result.diagnostics is not None
+    assert result.diagnostics["spatially_concentrated"] is True
+    assert not result.verified
+    assert result.reason == "spatially_concentrated_inliers"
