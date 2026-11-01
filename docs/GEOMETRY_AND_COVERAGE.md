@@ -27,7 +27,7 @@ Example body:
 }
 ```
 
-Calibration dimensions must match the original uploaded image. The camera matrix and distortion coefficients must come from a real calibration for the same camera/lens and image configuration. The feature extractor prefers this explicit calibration. When explicit calibration is absent, EXIF 35mm-equivalent focal length may be used to derive approximate intrinsics with a centred-principal-point assumption; this is not a substitute for calibration.
+Calibration dimensions must match the EXIF-oriented image dimensions used by the feature extractor and inspection workspace. The original uploaded bytes remain unchanged; EXIF orientation is applied consistently to analysis coordinates. The camera matrix and distortion coefficients must come from a real calibration for the same camera/lens and image configuration. The feature extractor prefers this explicit calibration. When explicit calibration is absent, EXIF 35mm-equivalent focal length may be used to derive approximate intrinsics with a centred-principal-point assumption; this is not a substitute for calibration.
 
 Distortion coefficients are passed to OpenCV point undistortion and bundle-adjustment projection where present. A calibration file is stored as a sidecar next to its source image; preserve the sidecar with the source analysis.
 
@@ -35,10 +35,10 @@ Distortion coefficients are passed to OpenCV point undistortion and bundle-adjus
 
 When eligible calibrated pairwise pose edges exist, the current CPU prototype:
 1. Builds connected camera components.
-2. Initializes component camera transforms from pairwise relative poses.
+2. Initializes component camera transforms from a deterministic maximum-confidence spanning forest, so weaker loop edges do not arbitrarily override stronger initialization paths.
 3. Joins pairwise inlier observations into multi-view feature tracks, rejecting tracks that contain conflicting detections from the same image.
 4. Triangulates sparse landmarks.
-5. Runs robust SciPy least-squares bundle adjustment with a sparse Jacobian, a fixed reference camera and a soft baseline constraint to remove gauge freedom.
+5. Runs robust SciPy least-squares bundle adjustment with a sparse Jacobian, a fixed reference camera and a soft camera-centre-distance baseline constraint to remove gauge freedom. The scale constraint is expressed between world-space camera centres derived from world-to-camera extrinsics, not by subtracting translation vectors from different camera frames.
 
 The response reports component status, camera and landmark counts, observation counts, optimizer status/message and median reprojection error. Each disconnected component has an independent arbitrary monocular coordinate frame and scale. The baseline constraint fixes a gauge; it does not create metric scale.
 
