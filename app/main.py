@@ -1,7 +1,7 @@
 import secrets
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.openapi.utils import get_openapi
 
 from app.api.routes.analysis import router as analysis_router
@@ -10,6 +10,7 @@ from app.api.routes.inspection import router as inspection_router
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.matching import router as matching_router
 from app.core.config import settings
+from app.web.studio import STUDIO_HTML
 
 app = FastAPI(
     title=settings.app_name,
@@ -76,10 +77,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-@app.get("/", tags=["root"])
-def root() -> dict[str, str]:
-    return {
-        "name": settings.app_name,
-        "status": "running",
-        "docs": "/docs",
-    }
+@app.get("/", tags=["root"], response_class=HTMLResponse)
+def root() -> HTMLResponse:
+    """Serve the browser-based capture upload and inspection entry point."""
+    return HTMLResponse(STUDIO_HTML)
