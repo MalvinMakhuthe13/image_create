@@ -37,10 +37,10 @@ def estimate_relative_pose(
             right.keypoints[matches[index].train_index] for index in inlier_indices
         ]).reshape(-1, 1, 2)
         left_normalized = cv2.undistortPoints(
-            left_pixels, left.camera_matrix, None
+            left_pixels, left.camera_matrix, left.distortion_coefficients
         ).reshape(-1, 2)
         right_normalized = cv2.undistortPoints(
-            right_pixels, right.camera_matrix, None
+            right_pixels, right.camera_matrix, right.distortion_coefficients
         ).reshape(-1, 2)
         focal = float(np.mean([
             left.camera_matrix[0, 0], left.camera_matrix[1, 1],
