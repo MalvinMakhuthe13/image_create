@@ -11,3 +11,6 @@ outputs/
 data/uploads/
 *.py[cod]
 .DS_Store
+
+# Local durable job metadata
+data/jobs.sqlite3*
