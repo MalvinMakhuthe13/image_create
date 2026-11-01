@@ -746,7 +746,11 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         "pair_results": pair_results,
         "subject_region_diagnostics": {
             "method": "manual override; otherwise cached U2-Net ONNX CPU segmentation, with heuristic GrabCut fallback diagnostics",
-            "status": "available" if any(source in {"manual", "automatic"} for source in mask_sources) else "heuristic_fallback_or_unavailable",
+            "status": (
+                "available" if all(source in {"manual", "automatic"} for source in mask_sources)
+                else "partial" if any(source in {"manual", "automatic"} for source in mask_sources)
+                else "unavailable"
+            ),
             "images": subject_summaries,
             "automatic_masks": automatic_summaries,
             "object_only_matching": (
