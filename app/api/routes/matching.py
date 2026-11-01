@@ -629,7 +629,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "matches_with_both_endpoints_inside_masks": len(object_matches),
                 "rejected_for_mask_violation": len(raw_object_matches) - len(object_matches),
                 "ransac_input_matches": len(object_matches),
-                "enforcement": "both_keypoint_centres_must_be_inside_their_saved_manual_masks",
+                "enforcement": "both_keypoint_centres_must_be_inside_their_accepted_subject_masks",
             }
             object_result = verify_geometry(
                 object_left, object_right, object_matches
