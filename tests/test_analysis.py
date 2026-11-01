@@ -59,3 +59,19 @@ def test_failed_multi_image_upload_removes_partial_analysis_folder(tmp_path, mon
     )
     assert response.status_code == 400
     assert list(tmp_path.iterdir()) == []
+
+
+def test_non_development_api_requires_configured_api_key(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "api_key", "test-secret-key")
+    denied = client.get("/api/v1/jobs")
+    assert denied.status_code == 401
+    accepted = client.get("/api/v1/health", headers={"X-API-Key": "test-secret-key"})
+    assert accepted.status_code == 200
+
+
+def test_non_development_api_fails_closed_without_api_key(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "api_key", None)
+    response = client.get("/api/v1/health")
+    assert response.status_code == 503
