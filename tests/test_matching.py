@@ -309,3 +309,26 @@ def test_camera_centre_scale_gauge_uses_world_space_centres_for_rotated_cameras(
     assert np.allclose(recovered_right, centre_right)
     assert np.isclose(np.linalg.norm(recovered_right - recovered_left), 3.0)
 
+def test_camera_pose_initialization_uses_high_confidence_spanning_tree():
+    from app.engine.matching.sparse_reconstruction import (
+        PairPose,
+        _initial_camera_poses,
+    )
+
+    identity = np.eye(3)
+    edges = [
+        PairPose(0, 1, identity, np.array([-1.0, 0.0, 0.0]), 100.0),
+        PairPose(1, 2, identity, np.array([-1.0, 0.0, 0.0]), 90.0),
+        # A low-confidence loop closure must not override the stronger chain.
+        PairPose(0, 2, identity, np.array([-100.0, 0.0, 0.0]), 1.0),
+    ]
+
+    rotations, translations, components = _initial_camera_poses(3, edges)
+
+    assert components == [[0, 1, 2]]
+    assert np.allclose(rotations[0], identity)
+    assert np.allclose(rotations[1], identity)
+    assert np.allclose(rotations[2], identity)
+    assert np.allclose(translations[1], [-1.0, 0.0, 0.0])
+    assert np.allclose(translations[2], [-2.0, 0.0, 0.0])
+
