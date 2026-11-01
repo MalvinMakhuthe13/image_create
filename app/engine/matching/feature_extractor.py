@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import cv2
 import numpy as np
@@ -27,11 +28,24 @@ def extract_features(image_path: Path, image_index: int, *, max_dimension: int =
         descriptors = np.asarray(descriptors, dtype=np.float32)
     camera_matrix = None
     intrinsics_source = None
+    distortion_coefficients = None
+    calibration_path = image_path.with_name(image_path.name + ".calibration.json")
+    if calibration_path.is_file():
+        try:
+            calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+            matrix = np.asarray(calibration["camera_matrix"], dtype=np.float64)
+            distortion = np.asarray(calibration.get("distortion_coefficients", []), dtype=np.float64)
+            if matrix.shape == (3, 3) and np.isfinite(matrix).all() and matrix[0, 0] > 0 and matrix[1, 1] > 0:
+                camera_matrix = matrix
+                distortion_coefficients = distortion.reshape(-1, 1) if distortion.size else None
+                intrinsics_source = "user_supplied_calibration"
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     try:
         focal_35mm = float(focal_35mm) if focal_35mm is not None else None
     except (TypeError, ValueError):
         focal_35mm = None
-    if focal_35mm is not None and focal_35mm > 0:
+    if camera_matrix is None and focal_35mm is not None and focal_35mm > 0:
         # Approximate pixel focal length from EXIF 35mm-equivalent focal length.
         # This does not provide calibrated distortion coefficients.
         diagonal_px = float(np.hypot(source_width, source_height))
@@ -44,5 +58,5 @@ def extract_features(image_path: Path, image_index: int, *, max_dimension: int =
         intrinsics_source = "exif_35mm_equivalent_approximation"
     return ImageFeatures(
         image_index, points, descriptors, source_width, source_height,
-        scale_x, scale_y, camera_matrix, intrinsics_source,
+        scale_x, scale_y, camera_matrix, intrinsics_source, distortion_coefficients,
     )
