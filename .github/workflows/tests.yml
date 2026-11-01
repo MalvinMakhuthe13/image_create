@@ -2,7 +2,7 @@ name: tests
 
 on:
   push:
-    branches: ["main", "mask-boundary-distance-diagnostics", "codex-full-audit-2026-11-01", "feature/**"]
+    branches: ["main", "mask-boundary-distance-diagnostics", "codex-full-audit-2026-11-01", "automatic-subject-segmentation", "feature/**"]
   pull_request:
 
 jobs:
