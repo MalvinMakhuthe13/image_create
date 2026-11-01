@@ -72,7 +72,12 @@ def test_geometry_reports_residuals_and_model_competition(tmp_path):
     assert result.diagnostics["candidate_inlier_counts"]["fundamental"] >= 0
     assert result.diagnostics["candidate_inlier_counts"]["homography"] >= 0
     assert result.diagnostics["selected_model"] == result.model
-    assert result.median_reprojection_error_px is not None
+    if result.model == "homography":
+        assert result.median_reprojection_error_px is not None
+        assert "median_symmetric_transfer_error_px" in result.diagnostics
+    else:
+        assert result.median_reprojection_error_px is None
+        assert "median_sampson_error_px" in result.diagnostics
 
 
 def test_geometry_rejects_concentrated_correspondence_cluster():
