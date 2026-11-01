@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from app.engine.matching.models import DescriptorMatch, GeometryResult, ImageFeatures
+from app.engine.matching.pose_estimator import estimate_relative_pose
 
 
 def _sampson_errors(matrix: np.ndarray, source: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -203,6 +204,10 @@ def verify_geometry(
             "pair may be planar or have low parallax; this is not a calibrated camera pose."
         ),
     }
+    diagnostics["relative_camera_pose"] = estimate_relative_pose(
+        left, right, matches, inlier_indices,
+        ransac_threshold_px=ransac_threshold_px,
+    )
     return GeometryResult(
         verified, model, count, inliers, round(ratio, 4), median_error,
         reason, inlier_indices, diagnostics,
