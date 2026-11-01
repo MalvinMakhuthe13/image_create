@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     matching_max_dimension: int = 1200
     matching_max_features: int = 3000
     upload_dir: Path = Path("data/uploads")
+    job_db_path: Path = Path("data/jobs.sqlite3")
     api_key: str | None = Field(default=None, validation_alias="IMAGE_CREATE_API_KEY")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
