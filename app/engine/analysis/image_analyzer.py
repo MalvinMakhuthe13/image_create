@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import warnings
+
+import cv2
+import numpy as np
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -17,6 +20,10 @@ class ImageAnalysis:
     mode: str
     file_size_bytes: int
     sharpness_score: float
+    laplacian_variance: float
+    edge_directionality: float
+    clipped_fraction: float
+    histogram_entropy_bits: float
     brightness_mean: float
     underexposed_fraction: float
     overexposed_fraction: float
@@ -82,11 +89,28 @@ def analyze_image(path: Path, max_pixels: int) -> tuple[ImageAnalysis, str]:
     total = max(1, sum(histogram))
     under = sum(histogram[:12]) / total
     over = sum(histogram[244:]) / total
+    gray_array = np.asarray(gray, dtype=np.uint8)
+    laplacian_variance = float(cv2.Laplacian(gray_array, cv2.CV_64F).var())
+    gradient_x = cv2.Sobel(gray_array, cv2.CV_64F, 1, 0, ksize=3)
+    gradient_y = cv2.Sobel(gray_array, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_x_variance = float(gradient_x.var())
+    gradient_y_variance = float(gradient_y.var())
+    edge_directionality = max(gradient_x_variance, gradient_y_variance) / max(
+        min(gradient_x_variance, gradient_y_variance), 1e-9
+    )
+    clipped_fraction = (sum(histogram[:3]) + sum(histogram[253:])) / total
+    probabilities = np.asarray(histogram, dtype=np.float64) / total
+    nonzero = probabilities[probabilities > 0]
+    histogram_entropy = float(-(nonzero * np.log2(nonzero)).sum())
     flags = []
     if min(width, height) < 640:
         flags.append("low_resolution")
-    if sharpness < 35:
+    if sharpness < 35 or laplacian_variance < 80:
         flags.append("possibly_blurry")
+    if laplacian_variance < 120 and edge_directionality > 4.0:
+        flags.append("possible_directional_motion_blur")
+    if clipped_fraction > 0.20:
+        flags.append("significant_highlight_or_shadow_clipping")
     if brightness < 45 or under > 0.25:
         flags.append("possibly_underexposed")
     if brightness > 210 or over > 0.25:
@@ -94,7 +118,9 @@ def analyze_image(path: Path, max_pixels: int) -> tuple[ImageAnalysis, str]:
 
     result = ImageAnalysis(
         width, height, image_format, mode, path.stat().st_size,
-        round(sharpness, 3), round(brightness, 3), round(under, 4), round(over, 4),
+        round(sharpness, 3), round(laplacian_variance, 3),
+        round(edge_directionality, 3), round(clipped_fraction, 4),
+        round(histogram_entropy, 3), round(brightness, 3), round(under, 4), round(over, 4),
         flags, dhash(image), captured_at, camera_make, camera_model, focal_length,
     )
     return result, FORMAT_EXTENSIONS[image_format]
