@@ -21,11 +21,12 @@ uvicorn app.main:app --reload
 pytest -q
 ```
 
+Browser Studio: http://127.0.0.1:8000/  
 API docs: http://127.0.0.1:8000/docs
 
 ## Implemented foundation
 
-1. Upload and preserve JPEG, PNG, WebP, TIFF and BMP source photographs with validation, hashes and image-quality metrics.
+1. Browser capture entry point for multi-image upload, image-quality summary and handoff to visual correspondence/mask inspection. Upload and preserve JPEG, PNG, WebP, TIFF and BMP source photographs with validation, hashes and image-quality metrics.
 2. Inspect resolution, EXIF, sharpness, blur, directional edge response, exposure/clipping, histogram entropy and exact/near duplicates.
 3. Extract CPU SIFT features and perform mutual ratio-tested descriptor matching.
 4. Evaluate a bounded adjacent-first set of image pairs with fundamental-matrix and homography RANSAC, residuals, planar/low-parallax safeguards and image-space support diagnostics.
@@ -39,7 +40,7 @@ API docs: http://127.0.0.1:8000/docs
 
 The current sparse reconstruction is a prototype, not a mature SfM implementation. It does not yet provide a validated global pose-graph optimizer with loop closure, production-grade track management, dense multi-view stereo, dense depth fusion, surface normals, occlusion-aware visibility, point-cloud fusion/cleanup, meshing, texturing, watertightness checks or defensible object-surface coverage.
 
-The job API currently persists queued job metadata; it does **not** execute a production processing queue. There are no worker leases, retries, cancellation, checkpoints or distributed scheduling. A shared API key is not per-user authentication, authorization or tenant isolation. A polished Studio workflow, persistent object storage, benchmark suite and production deployment hardening also remain.
+The job API currently persists queued job metadata; it does **not** execute a production processing queue. There are no worker leases, retries, cancellation, checkpoints or distributed scheduling. A shared API key is not per-user authentication, authorization or tenant isolation. The complete reconstruction Studio workflow, persistent object storage, benchmark suite and production deployment hardening also remain.
 
 The API must therefore continue to return `coverage_assessment.status = not_assessed` until a tested visibility method can support a coverage claim. Do not infer surface coverage from match counts, camera count or sparse landmarks.
 
