@@ -1,55 +1,21 @@
 # Geometry, camera pose and coverage: current contract
 
+This document describes the current implementation on the development branch. It separates measured image evidence, pairwise geometry, sparse reconstruction and dense surface visibility. These are different levels of evidence and must not be conflated.
+
 ## Pairwise geometric verification
 
-The CPU matcher extracts SIFT descriptors and applies mutual Lowe-ratio matching. Each candidate pair is evaluated with both a RANSAC fundamental matrix and a RANSAC homography. The response reports each model's inlier count, the selected model, a Sampson residual for a selected fundamental matrix or symmetric transfer residual for a selected homography, and 4x4 image-space support diagnostics.
+The CPU matcher extracts SIFT descriptors and applies mutual Lowe-ratio matching. A bounded adjacent-first scheduler evaluates candidate pairs with RANSAC fundamental-matrix and homography models. The response reports model support, residuals, planar/low-parallax ambiguity and 4x4 image-space support diagnostics.
 
-A homography-dominant result is flagged as possibly planar or low-parallax. Concentrated inliers are rejected as a verified connectivity edge. These are conservative diagnostics, not a complete degeneracy classifier. A homography can also fit a rotating camera, a distant scene, or a small field of view; a fundamental matrix can be poorly conditioned. Treat the warnings as evidence to review, not a semantic scene label.
+Homography-dominant or planar-ambiguous pairs are deliberately prevented from seeding the global sparse camera pose graph. Relative pose is attempted from eligible fundamental-matrix inliers only. This is a conservative safeguard, not a complete degeneracy classifier. The pair schedule may omit valid non-adjacent links.
 
-## Relative camera pose
+## Camera intrinsics and distortion
 
-When both images contain EXIF 35mm-equivalent focal length, the feature extractor derives an approximate pixel focal length from the image diagonal and assumes a centred principal point. This is an approximation, not a camera calibration: lens distortion, crop, digital zoom, sensor geometry and manufacturer metadata can make it inaccurate.
+Explicit per-image calibration can be supplied with:
 
-When intrinsics are available, the system estimates an essential matrix and recovers pairwise relative rotation and translation direction. Translation magnitude is unknown from a monocular pair. If EXIF intrinsics were used, the response labels calibration quality as approximate.
-
-When intrinsics are missing, relative pose is explicitly returned as unavailable. The system does not silently invent a focal length.
-
-## Sparse triangulation
-
-If relative pose is recoverable, inlier correspondences are triangulated into a pairwise sparse point set. The response reports positive-depth point count and median reprojection error. These points have arbitrary monocular scale and are not fused into a global reconstruction.
-
-## What is not yet 3D coverage
-
-A pairwise sparse point cloud is not a dense surface, mesh, watertight model, or visibility-complete scene. The current system does not yet:
-- optimize all camera poses jointly with bundle adjustment;
-- reconcile scale and drift across a multi-image pose graph;
-- fuse tracks observed in three or more images into globally consistent 3D landmarks;
-- estimate dense depth, surface normals, occlusion or unseen surface regions;
-- calculate object-surface coverage percentages or certify underside/rear visibility.
-
-Accordingly, the API must continue to report `coverage_assessment.status = not_assessed`. Do not translate pairwise match counts or sparse triangulation counts into a percentage of object coverage.
-
-## Capture advice contract
-
-The current API can identify weak pairwise links, blur/exposure concerns, near duplicates and missing geometric support. It must not claim that a particular physical surface is missing until global camera geometry and surface visibility have been computed. Future capture advice should cite the supporting views, predicted visibility gain, and uncertainty.
-
-## Deployment safety
-
-Development mode remains convenient for localhost use. Outside development, all API-prefix routes require `X-API-Key` matching the `IMAGE_CREATE_API_KEY` environment variable. The service fails closed with HTTP 503 if the environment is non-development and the key is absent.
-
-This is a shared service key, not user authentication or tenant isolation. Before public multi-user deployment, add per-user identity, authorization and analysis ownership, quotas, rate limiting, persistent object storage, background workers, retention policies, and audit logs. Do not expose the local upload directory as a public static directory.
-
-## Job persistence boundary
-
-Job metadata is persisted in a local SQLite database using WAL mode and a busy timeout. This survives API process restarts on a single host with persistent disk. It does not yet provide distributed locking, worker leases, retry scheduling, progress events, or multi-host coordination. Production processing still requires a dedicated worker queue and durable shared storage.
-
-
-## Explicit camera calibration and sparse global optimization
-
-A per-image calibration can be supplied with:
 `PUT /api/v1/analysis/{analysis_id}/calibration/{image_index}`
 
-Example JSON:
+Example body:
+
 ```json
 {
   "camera_matrix": [
@@ -60,16 +26,45 @@ Example JSON:
   "distortion_coefficients": [-0.12, 0.03, 0.0, 0.0, 0.0]
 }
 ```
-The matrix and distortion coefficients must come from a real calibration for the same image dimensions and camera/lens configuration. The endpoint validates dimensions, focal lengths, principal point and coefficient count. Re-run matching after supplying calibration.
 
-When calibrated pairwise pose edges are available, the CPU sparse reconstruction stage:
+Calibration dimensions must match the original uploaded image. The camera matrix and distortion coefficients must come from a real calibration for the same camera/lens and image configuration. The feature extractor prefers this explicit calibration. When explicit calibration is absent, EXIF 35mm-equivalent focal length may be used to derive approximate intrinsics with a centred-principal-point assumption; this is not a substitute for calibration.
+
+Distortion coefficients are passed to OpenCV point undistortion and bundle-adjustment projection where present. A calibration file is stored as a sidecar next to its source image; preserve the sidecar with the source analysis.
+
+## Sparse multi-view reconstruction
+
+When eligible calibrated pairwise pose edges exist, the current CPU prototype:
 1. Builds connected camera components.
 2. Initializes component camera transforms from pairwise relative poses.
-3. Joins pairwise inlier observations into multi-view feature tracks.
+3. Joins pairwise inlier observations into multi-view feature tracks, rejecting tracks that contain conflicting detections from the same image.
 4. Triangulates sparse landmarks.
-5. Runs robust SciPy least-squares bundle adjustment over camera rotations, translations and 3D landmarks, fixing a reference camera and constraining one baseline to remove gauge freedom.
+5. Runs robust SciPy least-squares bundle adjustment with a sparse Jacobian, a fixed reference camera and a soft baseline constraint to remove gauge freedom.
 
-This is an initial sparse global optimization, not a mature production SfM system. Component scales remain arbitrary; approximate EXIF intrinsics remain approximate; track association can contain errors; the bounded optimizer may stop before convergence. Inspect component status and reprojection residuals before trusting camera poses. No dense reconstruction or surface-coverage percentage is inferred.
+The response reports component status, camera and landmark counts, observation counts, optimizer status/message and median reprojection error. Each disconnected component has an independent arbitrary monocular coordinate frame and scale. The baseline constraint fixes a gauge; it does not create metric scale.
 
+This is an initial bounded CPU prototype, not a mature production SfM engine. Track association can still contain mismatches, pairwise pose errors can contaminate initialization, optimizer termination does not prove global correctness, and a low reprojection error does not by itself prove correct scene geometry. Results require benchmark validation and review.
 
-Pose-seeding safeguard: homography-selected or homography-dominant/planar-ambiguous pairs do not seed the global camera pose graph. Relative pose is attempted from fundamental-matrix inliers only. This intentionally reduces the number of usable pose edges rather than allowing planar or low-parallax ambiguity to contaminate the global reconstruction.
+## Dense reconstruction and surface coverage
+
+Dense multi-view stereo, per-view depth confidence, geometric depth consistency, occlusion rejection, depth fusion, dense point-cloud cleanup, surface normals, meshing, texturing, watertightness analysis and occlusion-aware visibility are **not implemented**.
+
+Therefore:
+- `coverage_assessment.status` must remain `not_assessed`.
+- Sparse landmarks must never be converted into a surface-coverage percentage.
+- Camera count, feature count, pairwise inlier count and image-space grid occupancy are not 3D surface coverage.
+- An unseen or occluded region must be reported as unknown, not filled with invented geometry.
+- A disconnected camera component must not be merged into another component without a validated registration.
+
+A future coverage calculation needs a reconstructed surface, registered camera poses, per-camera visibility/occlusion tests, a documented surface-area denominator, and confidence/unknown labels.
+
+## Capture advice contract
+
+Current recommendations are evidence-linked to image quality, pairwise geometric support and graph connectivity. They can identify blur, exposure problems, near duplicates, weak pair links and missing connectivity. They cannot yet assert that a physical underside, rear panel, rock face or interior region is missing. That requires a validated global camera model and surface visibility.
+
+Future next-best-photo suggestions should include the affected surface region, supporting camera views, expected visibility gain, uncertainty and the reason a new capture is needed.
+
+## Job execution and deployment boundary
+
+Job metadata is persisted in SQLite/WAL and survives a process restart when the database is on persistent disk. The current job endpoint creates and retrieves queued metadata; it does not execute a production processing pipeline. Durable workers, leases, progress, retries, cancellation, checkpoints, multi-host coordination and shared object storage remain to be implemented.
+
+Outside development, API-prefix routes require `X-API-Key` matching `IMAGE_CREATE_API_KEY`; the service fails closed if the key is missing. This is a shared service key, not per-user authentication or tenant isolation. Public multi-user deployment still requires identity, ownership/authorization, quotas, rate limits, retention/deletion, audit logs, monitoring and backups.
