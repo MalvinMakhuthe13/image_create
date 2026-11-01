@@ -180,3 +180,18 @@ def test_capture_advisor_only_recommends_from_reported_evidence():
     assert recommendations
     assert all("evidence" in item and "confidence" in item for item in recommendations)
     assert any(item["image_indices"] == [0, 1] for item in recommendations)
+
+
+def test_feature_extractor_uses_exif_35mm_equivalent_as_approximate_intrinsics(tmp_path):
+    image = texture(76, 640)
+    path = tmp_path / "with-focal-exif.jpg"
+    pil_image = Image.fromarray(image)
+    exif = pil_image.getexif()
+    exif[41989] = 50
+    pil_image.save(path, exif=exif)
+
+    features = extract_features(path, 0)
+    assert features.camera_matrix is not None
+    assert features.intrinsics_source == "exif_35mm_equivalent_approximation"
+    assert features.camera_matrix.shape == (3, 3)
+    assert features.camera_matrix[0, 0] > 0
