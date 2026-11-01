@@ -242,7 +242,6 @@ def test_subject_region_support_is_advisory_and_does_not_change_geometry():
 def test_classify_keypoints_uses_region_mask_coordinates():
     from types import SimpleNamespace
 
-    import numpy as np
 
     from app.engine.matching.subject_region import classify_keypoints
 
