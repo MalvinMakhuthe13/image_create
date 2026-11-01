@@ -547,7 +547,9 @@ def test_object_only_result_includes_its_own_spatial_distribution(tmp_path, monk
     mask_dir = Path(upload_dir).parent / "masks" / analysis_id
     mask_dir.mkdir(parents=True)
     for index in range(2):
-        Image.new("L", (640, 480), 255).save(mask_dir / f"{index:03d}.png")
+        mask_image = Image.new("L", (640, 480), 0)
+        ImageDraw.Draw(mask_image).rectangle((20, 20, 620, 460), fill=255)
+        mask_image.save(mask_dir / f"{index:03d}.png")
 
     response = client.post(f"/api/v1/analysis/{analysis_id}/matching")
     assert response.status_code == 200
