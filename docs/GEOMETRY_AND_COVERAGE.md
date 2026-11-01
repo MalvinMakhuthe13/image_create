@@ -42,3 +42,31 @@ This is a shared service key, not user authentication or tenant isolation. Befor
 ## Job persistence boundary
 
 Job metadata is persisted in a local SQLite database using WAL mode and a busy timeout. This survives API process restarts on a single host with persistent disk. It does not yet provide distributed locking, worker leases, retry scheduling, progress events, or multi-host coordination. Production processing still requires a dedicated worker queue and durable shared storage.
+
+
+## Explicit camera calibration and sparse global optimization
+
+A per-image calibration can be supplied with:
+`PUT /api/v1/analysis/{analysis_id}/calibration/{image_index}`
+
+Example JSON:
+```json
+{
+  "camera_matrix": [
+    [1200.0, 0.0, 960.0],
+    [0.0, 1200.0, 540.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "distortion_coefficients": [-0.12, 0.03, 0.0, 0.0, 0.0]
+}
+```
+The matrix and distortion coefficients must come from a real calibration for the same image dimensions and camera/lens configuration. The endpoint validates dimensions, focal lengths, principal point and coefficient count. Re-run matching after supplying calibration.
+
+When calibrated pairwise pose edges are available, the CPU sparse reconstruction stage:
+1. Builds connected camera components.
+2. Initializes component camera transforms from pairwise relative poses.
+3. Joins pairwise inlier observations into multi-view feature tracks.
+4. Triangulates sparse landmarks.
+5. Runs robust SciPy least-squares bundle adjustment over camera rotations, translations and 3D landmarks, fixing a reference camera and constraining one baseline to remove gauge freedom.
+
+This is an initial sparse global optimization, not a mature production SfM system. Component scales remain arbitrary; approximate EXIF intrinsics remain approximate; track association can contain errors; the bounded optimizer may stop before convergence. Inspect component status and reprojection residuals before trusting camera poses. No dense reconstruction or surface-coverage percentage is inferred.
