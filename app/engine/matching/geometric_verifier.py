@@ -180,8 +180,6 @@ def verify_geometry(
         verified, reason = False, "insufficient_inliers"
     elif ratio < minimum_inlier_ratio:
         verified, reason = False, "low_inlier_ratio"
-    elif spatially_concentrated:
-        verified, reason = False, "spatially_concentrated_inliers"
     else:
         verified, reason = True, "geometrically_consistent"
 
@@ -197,6 +195,7 @@ def verify_geometry(
         "left_image_inlier_spread": left_spread,
         "right_image_inlier_spread": right_spread,
         "possible_planar_or_low_parallax_scene": planar_dominant,
+        "spatial_concentration_is_advisory": True,
         "spatially_concentrated": spatially_concentrated,
         "warnings": warnings,
         "interpretation": (
