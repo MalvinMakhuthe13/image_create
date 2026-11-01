@@ -138,3 +138,35 @@ def test_upload_reports_exif_oriented_dimensions_without_rewriting_source(tmp_pa
     stored = tmp_path / response.json()["analysis_id"] / asset["stored_filename"]
     assert stored.read_bytes() == original
 
+def test_browser_session_cookie_can_authenticate_studio_api(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "api_key", "test-secret-key")
+
+    session = client.post(
+        "/api/v1/session",
+        headers={"X-API-Key": "test-secret-key"},
+    )
+    assert session.status_code == 200
+    cookie = session.headers["set-cookie"]
+    assert "image_create_session=test-secret-key" in cookie
+    assert "httponly" in cookie.lower()
+    assert "secure" in cookie.lower()
+    assert "samesite=strict" in cookie.lower()
+    assert "path=/api/v1" in cookie.lower()
+
+    client.cookies.set("image_create_session", "test-secret-key")
+    accepted = client.get("/api/v1/health")
+    assert accepted.status_code == 200
+    client.cookies.clear()
+
+
+def test_browser_session_rejects_invalid_api_key(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "api_key", "test-secret-key")
+    response = client.post(
+        "/api/v1/session",
+        headers={"X-API-Key": "wrong-key"},
+    )
+    assert response.status_code == 401
+    assert "set-cookie" not in response.headers
+
