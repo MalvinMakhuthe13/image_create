@@ -40,7 +40,7 @@ When eligible calibrated pairwise pose edges exist, the current CPU prototype:
 4. Triangulates sparse landmarks.
 5. Runs robust SciPy least-squares bundle adjustment with a sparse Jacobian, a fixed reference camera and a soft camera-centre-distance baseline constraint to remove gauge freedom. The scale constraint is expressed between world-space camera centres derived from world-to-camera extrinsics, not by subtracting translation vectors from different camera frames.
 
-The response reports component status, camera and landmark counts, observation counts, optimizer status/message and median reprojection error. Each disconnected component has an independent arbitrary monocular coordinate frame and scale. The baseline constraint fixes a gauge; it does not create metric scale.
+The response reports component status, camera and landmark counts, observation counts, optimizer status/message and median reprojection error. A component is marked fully optimized only when the optimizer converges and median reprojection error is at most 5 pixels; a converged result above that threshold is reported as `low_quality`, and a non-converged result remains partial. This is a conservative engineering gate, not a universal accuracy guarantee. Each disconnected component has an independent arbitrary monocular coordinate frame and scale. The baseline constraint fixes a gauge; it does not create metric scale.
 
 This is an initial bounded CPU prototype, not a mature production SfM engine. Track association can still contain mismatches, pairwise pose errors can contaminate initialization, optimizer termination does not prove global correctness, and a low reprojection error does not by itself prove correct scene geometry. Results require benchmark validation and review.
 
