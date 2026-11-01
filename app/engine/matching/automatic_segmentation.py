@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Automatic subject-mask generation with an optional ONNX background-removal model.
 
 The model is deliberately optional: a missing model never blocks image analysis.
@@ -7,10 +5,12 @@ GrabCut remains an explicitly labelled fallback and is never presented as semant
 segmentation. Generated masks are cached separately from immutable source images.
 """
 
-from pathlib import Path
-from functools import lru_cache
+from __future__ import annotations
+
 import os
 import tempfile
+from functools import lru_cache
+from pathlib import Path
 
 import cv2
 import numpy as np
