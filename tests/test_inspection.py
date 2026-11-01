@@ -84,7 +84,8 @@ def test_mask_and_calibration_dimensions_follow_exif_orientation(tmp_path, monke
 
     client = TestClient(app)
     mask_bytes = BytesIO()
-    mask_image = Image.new("L", (48, 64), 0)\n    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_bytes, format="PNG")
+    mask_image = Image.new("L", (48, 64), 0)
+    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_bytes, format="PNG")
     saved_mask = client.put(
         f"/api/v1/analysis/{analysis_id}/masks/0",
         files={"file": ("mask.png", mask_bytes.getvalue(), "image/png")},
