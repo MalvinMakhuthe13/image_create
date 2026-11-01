@@ -75,3 +75,18 @@ def test_non_development_api_fails_closed_without_api_key(monkeypatch):
     monkeypatch.setattr(settings, "api_key", None)
     response = client.get("/api/v1/health")
     assert response.status_code == 503
+
+
+def test_image_quality_report_includes_blur_clipping_and_entropy_metrics(tmp_path):
+    from app.engine.analysis.image_analyzer import analyze_image
+
+    image_path = tmp_path / "quality.png"
+    Image.new("RGB", (900, 700), (255, 255, 255)).save(image_path)
+    metrics, extension = analyze_image(image_path, 40_000_000)
+    report = metrics.to_dict()
+    assert extension == ".png"
+    assert report["laplacian_variance"] >= 0
+    assert report["edge_directionality"] >= 0
+    assert 0 <= report["clipped_fraction"] <= 1
+    assert 0 <= report["histogram_entropy_bits"] <= 8
+    assert "significant_highlight_or_shadow_clipping" in report["quality_flags"]
