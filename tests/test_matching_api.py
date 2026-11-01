@@ -338,7 +338,8 @@ def test_object_only_reruns_geometry_using_saved_manual_masks(tmp_path, monkeypa
     analysis_id = upload.json()["analysis_id"]
     mask_dir = tmp_path.parent / "masks" / analysis_id
     mask_dir.mkdir(parents=True)
-    full_foreground = Image.new("L", (640, 480), 0)\n    ImageDraw.Draw(full_foreground).rectangle((20, 20, 620, 460), fill=255)
+    full_foreground = Image.new("L", (640, 480), 0)
+    ImageDraw.Draw(full_foreground).rectangle((20, 20, 620, 460), fill=255)
     full_foreground.save(mask_dir / "000.png")
     full_foreground.save(mask_dir / "001.png")
 
@@ -627,7 +628,8 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
 
     mask_path = tmp_path / "masks" / str(analysis_id) / "000.png"
     mask_path.parent.mkdir(parents=True)
-    mask_image = Image.new("L", (48, 64), 0)\n    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_path)
+    mask_image = Image.new("L", (48, 64), 0)
+    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_path)
 
     mask = _load_manual_mask(analysis_id, 0, image_path)
     assert mask is not None
