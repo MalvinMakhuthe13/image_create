@@ -55,6 +55,6 @@ The API must therefore continue to return `coverage_assessment.status = not_asse
 
 ## Security
 
-Development mode is intended for localhost. Outside development, the API fails closed unless `IMAGE_CREATE_API_KEY` is configured; requests to `/api/v1/*` must include `X-API-Key`. This is a shared service key only. Do not expose local upload folders directly to the public internet.
+Development mode is intended for localhost. Outside development, the API fails closed unless `IMAGE_CREATE_API_KEY` is configured. API clients use `X-API-Key`; the browser Studio exchanges it for an HttpOnly, Secure, SameSite=Strict session cookie so image and inspection requests can be authenticated without putting the key in URLs. The browser session requires HTTPS outside development. This is a shared service key only, not per-user identity or tenant isolation. Do not expose local upload folders directly to the public internet.
 
 See `docs/TESTING_GUIDE.md`, `docs/GEOMETRY_AND_COVERAGE.md`, `docs/OBJECT_ONLY_MATCHING.md`, `docs/SPATIAL_DIAGNOSTICS.md` and `docs/ROADMAP.md` and `docs/RECONSTRUCTION_BACKEND_DECISION.md` for the test workflow, technical contracts, backend licensing assessment and remaining work.
