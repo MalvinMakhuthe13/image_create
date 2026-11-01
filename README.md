@@ -28,7 +28,7 @@ API docs: http://127.0.0.1:8000/docs
 2. Inspect resolution, EXIF, sharpness, blur, directional edge response, exposure/clipping, histogram entropy and exact/near duplicates.
 3. Extract CPU SIFT features and perform mutual ratio-tested descriptor matching.
 4. Evaluate a bounded adjacent-first set of image pairs with fundamental-matrix and homography RANSAC, residuals, planar/low-parallax safeguards and image-space support diagnostics.
-5. Keep all-scene connectivity separate from object-only analysis. Object-only geometric verification requires valid user-painted masks on both images; automatic subject proposals remain advisory.
+5. Keep all-scene connectivity separate from object-only analysis. Object-only geometric verification uses accepted automatic U2-Net CPU masks by default, with user-painted corrections taking precedence. Heuristic GrabCut fallback is never treated as a semantic mask.
 6. Produce evidence-linked capture recommendations from measured image and pair diagnostics.
 7. Accept explicit per-image camera calibration (camera matrix and supported OpenCV distortion coefficients), checking calibration dimensions. EXIF-derived intrinsics are approximate only.
 8. Estimate relative camera poses where supported, triangulate pairwise sparse points, fuse feature observations into multi-view tracks, initialize connected camera components and run a bounded robust SciPy bundle-adjustment prototype.
@@ -57,4 +57,4 @@ The API must therefore continue to return `coverage_assessment.status = not_asse
 
 Development mode is intended for localhost. Outside development, the API fails closed unless `IMAGE_CREATE_API_KEY` is configured. API clients use `X-API-Key`; the browser Studio exchanges it for an HttpOnly, Secure, SameSite=Strict session cookie so image and inspection requests can be authenticated without putting the key in URLs. The browser session requires HTTPS outside development. This is a shared service key only, not per-user identity or tenant isolation. Do not expose local upload folders directly to the public internet.
 
-See `docs/TESTING_GUIDE.md`, `docs/GEOMETRY_AND_COVERAGE.md`, `docs/OBJECT_ONLY_MATCHING.md`, `docs/SPATIAL_DIAGNOSTICS.md` and `docs/ROADMAP.md` and `docs/RECONSTRUCTION_BACKEND_DECISION.md` for the test workflow, technical contracts, backend licensing assessment and remaining work.
+See `docs/AUTOMATIC_SUBJECT_SEGMENTATION.md`, `docs/TESTING_GUIDE.md`, `docs/GEOMETRY_AND_COVERAGE.md`, `docs/OBJECT_ONLY_MATCHING.md`, `docs/SPATIAL_DIAGNOSTICS.md` and `docs/ROADMAP.md` and `docs/RECONSTRUCTION_BACKEND_DECISION.md` for the test workflow, technical contracts, backend licensing assessment and remaining work.
