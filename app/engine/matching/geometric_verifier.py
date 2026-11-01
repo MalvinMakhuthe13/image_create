@@ -203,10 +203,18 @@ def verify_geometry(
             "pair may be planar or have low parallax; this is not a calibrated camera pose."
         ),
     }
-    diagnostics["relative_camera_pose"] = estimate_relative_pose(
-        left, right, matches, inlier_indices,
-        ransac_threshold_px=ransac_threshold_px,
-    )
+    if model == "fundamental" and fundamental_mask is not None and not planar_dominant:
+        pose_inlier_indices = tuple(int(index) for index in np.flatnonzero(fundamental_mask))
+        diagnostics["relative_camera_pose"] = estimate_relative_pose(
+            left, right, matches, pose_inlier_indices,
+            ransac_threshold_px=ransac_threshold_px,
+        )
+        diagnostics["relative_camera_pose"]["pose_source"] = "fundamental_matrix_inliers"
+    else:
+        diagnostics["relative_camera_pose"] = {
+            "status": "unavailable",
+            "reason": "homography_selected_or_planar_low_parallax_ambiguity",
+        }
     return GeometryResult(
         verified, model, count, inliers, round(ratio, 4),
         median_error if model == "homography" else None,
