@@ -332,3 +332,67 @@ def test_camera_pose_initialization_uses_high_confidence_spanning_tree():
     assert np.allclose(translations[1], [-1.0, 0.0, 0.0])
     assert np.allclose(translations[2], [-2.0, 0.0, 0.0])
 
+def test_camera_pose_composition_preserves_non_identity_rotations():
+    from app.engine.matching.sparse_reconstruction import (
+        PairPose,
+        _initial_camera_poses,
+    )
+
+    angle_y = np.deg2rad(20.0)
+    angle_z = np.deg2rad(-15.0)
+    rotation_01 = np.array([
+        [np.cos(angle_y), 0.0, np.sin(angle_y)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(angle_y), 0.0, np.cos(angle_y)],
+    ])
+    rotation_12 = np.array([
+        [np.cos(angle_z), -np.sin(angle_z), 0.0],
+        [np.sin(angle_z), np.cos(angle_z), 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+    translation_01 = np.array([-0.8, 0.1, 0.0])
+    translation_12 = np.array([-0.4, 0.2, 0.1])
+    edges = [
+        PairPose(0, 1, rotation_01, translation_01, 10.0),
+        PairPose(1, 2, rotation_12, translation_12, 9.0),
+    ]
+
+    rotations, translations, components = _initial_camera_poses(3, edges)
+
+    assert components == [[0, 1, 2]]
+    assert np.allclose(rotations[1], rotation_01)
+    assert np.allclose(translations[1], translation_01)
+    assert np.allclose(rotations[2], rotation_12 @ rotation_01)
+    assert np.allclose(
+        translations[2], rotation_12 @ translation_01 + translation_12
+    )
+
+
+def test_camera_pose_composition_inverts_reversed_relative_edge():
+    from app.engine.matching.sparse_reconstruction import (
+        PairPose,
+        _initial_camera_poses,
+    )
+
+    angle = np.deg2rad(25.0)
+    rotation_01 = np.array([
+        [np.cos(angle), 0.0, np.sin(angle)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(angle), 0.0, np.cos(angle)],
+    ])
+    translation_01 = np.array([-0.7, 0.05, 0.1])
+    edge_01 = PairPose(0, 1, rotation_01, translation_01, 5.0)
+
+    rotations, translations, components = _initial_camera_poses(2, [edge_01])
+
+    assert components == [[0, 1]]
+    assert np.allclose(rotations[1], rotation_01)
+    assert np.allclose(translations[1], translation_01)
+
+    # A graph whose only stored edge is 1 -> 0 must recover camera 1
+    # by applying the inverse rigid transform.
+    edge_10 = PairPose(1, 0, rotation_01.T, -rotation_01.T @ translation_01, 5.0)
+    reverse_rotations, reverse_translations, _ = _initial_camera_poses(2, [edge_10])
+    assert np.allclose(reverse_rotations[1], rotation_01)
+    assert np.allclose(reverse_translations[1], translation_01)
+
