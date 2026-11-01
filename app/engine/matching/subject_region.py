@@ -95,8 +95,8 @@ def classify_keypoints(features, region: dict) -> dict:
         "foreground_fraction": round(foreground / total, 4) if total else 0.0,
         "labels": tuple(labels),
         "confidence_note": (
-            "Heuristic GrabCut region proposal; foreground may include table/floor "
-            "and is not a semantic object mask."
+            "Subject-region mask; foreground may include nearby surfaces "
+            "and mask provenance is reported separately."
         ),
     }
 
