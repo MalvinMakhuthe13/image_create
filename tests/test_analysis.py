@@ -90,3 +90,29 @@ def test_image_quality_report_includes_blur_clipping_and_entropy_metrics(tmp_pat
     assert 0 <= report["clipped_fraction"] <= 1
     assert 0 <= report["histogram_entropy_bits"] <= 8
     assert "significant_highlight_or_shadow_clipping" in report["quality_flags"]
+
+
+def test_sqlite_job_store_survives_store_reinstantiation(tmp_path):
+    from uuid import uuid4
+
+    from app.schemas.jobs import JobResponse
+    from app.services.job_store import PersistentJobStore
+
+    database = tmp_path / "jobs.sqlite3"
+    first_store = PersistentJobStore(database)
+    job_id = uuid4()
+    job = JobResponse(
+        id=job_id,
+        status="queued",
+        generation_mode="verified",
+        message="Persisted test job",
+    )
+    first_store[job_id] = job
+
+    restarted_store = PersistentJobStore(database)
+    restored = restarted_store.get(job_id)
+    assert restored is not None
+    assert restored.id == job_id
+    assert restored.status == "queued"
+    assert restored.generation_mode == "verified"
+    assert len(restarted_store) == 1
