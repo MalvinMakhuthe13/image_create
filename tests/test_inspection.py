@@ -69,3 +69,41 @@ def test_mask_routes_reject_unknown_image_index(tmp_path, monkeypatch):
     client = TestClient(app)
     assert client.get(f"/api/v1/analysis/{analysis_id}/images/9").status_code == 404
     assert client.get(f"/api/v1/analysis/{analysis_id}/masks/9").status_code == 404
+
+def test_mask_and_calibration_dimensions_follow_exif_orientation(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = uuid4()
+    folder = settings.upload_dir / str(analysis_id)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    image = Image.new("RGB", (64, 48), "white")
+    exif = image.getexif()
+    exif[274] = 6  # Rotate 90 degrees clockwise for display.
+    filename = "001_0123456789ab.jpg"
+    image.save(folder / filename, format="JPEG", exif=exif)
+
+    client = TestClient(app)
+    mask_bytes = BytesIO()
+    Image.new("L", (48, 64), 255).save(mask_bytes, format="PNG")
+    saved_mask = client.put(
+        f"/api/v1/analysis/{analysis_id}/masks/0",
+        files={"file": ("mask.png", mask_bytes.getvalue(), "image/png")},
+    )
+    assert saved_mask.status_code == 200
+    assert saved_mask.json()["width"] == 48
+    assert saved_mask.json()["height"] == 64
+
+    calibration = client.put(
+        f"/api/v1/analysis/{analysis_id}/calibration/0",
+        json={
+            "camera_matrix": [
+                [500.0, 0.0, 24.0],
+                [0.0, 500.0, 32.0],
+                [0.0, 0.0, 1.0],
+            ],
+            "distortion_coefficients": [],
+        },
+    )
+    assert calibration.status_code == 200
+    assert calibration.json()["dimensions"] == {"width": 48, "height": 64}
+
