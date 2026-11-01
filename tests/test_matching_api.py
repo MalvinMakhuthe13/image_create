@@ -629,7 +629,8 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
     mask_path = tmp_path / "masks" / str(analysis_id) / "000.png"
     mask_path.parent.mkdir(parents=True)
     mask_image = Image.new("L", (48, 64), 0)
-    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)\n    mask_image.save(mask_path)
+    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)
+    mask_image.save(mask_path)
 
     mask = _load_manual_mask(analysis_id, 0, image_path)
     assert mask is not None
