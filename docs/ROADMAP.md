@@ -4,6 +4,10 @@ This roadmap distinguishes implemented code from capabilities that still need im
 
 ## Status at this branch
 
+### Browser workflow — initial entry point implemented
+- [x] Browser upload page, capture-set quality summary and handoff to visual inspection.
+- [ ] Complete reconstruction Studio with camera calibration UI, progress-aware reconstruction, 3D review, surface validation, repair and exports.
+
 ### Foundation — partially implemented
 - [x] FastAPI image upload and validation, hashes, EXIF and image-quality analysis.
 - [x] CPU SIFT extraction and bounded adjacent-first pair matching.
