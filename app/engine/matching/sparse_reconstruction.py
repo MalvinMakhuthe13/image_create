@@ -44,25 +44,42 @@ def _components(image_count: int, edges: list[PairPose]) -> list[list[int]]:
 
 
 def _initial_camera_poses(image_count: int, edges: list[PairPose]):
-    """Propagate relative world-to-camera transforms along a maximum-confidence tree."""
+    """Propagate poses over a deterministic maximum-confidence spanning forest."""
+    parent = list(range(image_count))
+
+    def find(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    selected = []
+    for edge in sorted(
+        edges, key=lambda item: (-item.weight, item.left, item.right)
+    ):
+        left_root, right_root = find(edge.left), find(edge.right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+            selected.append(edge)
+
     adjacency = [[] for _ in range(image_count)]
-    for edge in edges:
+    for edge in selected:
         adjacency[edge.left].append((edge.right, edge, True))
         adjacency[edge.right].append((edge.left, edge, False))
-    rotations, translations, visited = {}, {}, set()
+
+    rotations, translations = {}, {}
     groups = _components(image_count, edges)
     for group in groups:
         root = group[0]
         rotations[root] = np.eye(3)
         translations[root] = np.zeros(3)
-        visited.add(root)
         queue = deque([root])
         while queue:
             current = queue.popleft()
             for neighbour, edge, forward in sorted(
-                adjacency[current], key=lambda item: -item[1].weight
+                adjacency[current], key=lambda item: (-item[1].weight, item[0])
             ):
-                if neighbour in visited:
+                if neighbour in rotations:
                     continue
                 if forward:
                     relative_r, relative_t = edge.rotation, edge.translation
@@ -73,7 +90,6 @@ def _initial_camera_poses(image_count: int, edges: list[PairPose]):
                 translations[neighbour] = (
                     relative_r @ translations[current] + relative_t
                 )
-                visited.add(neighbour)
                 queue.append(neighbour)
     return rotations, translations, groups
 
