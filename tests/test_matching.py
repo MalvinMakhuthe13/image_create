@@ -146,3 +146,29 @@ def test_relative_pose_is_explicitly_unavailable_without_intrinsics():
     assert estimate_relative_pose(left, right, matches, range(10)) == {
         "status": "unavailable", "reason": "camera_intrinsics_missing"
     }
+
+
+def test_capture_advisor_only_recommends_from_reported_evidence():
+    from app.engine.matching.capture_advisor import recommend_capture_improvements
+
+    images = [
+        {"image_index": 0, "feature_count": 30},
+        {"image_index": 1, "feature_count": 500},
+    ]
+    pairs = [{
+        "image_indices": [0, 1],
+        "pair_type": "adjacent",
+        "verified": False,
+        "reason": "insufficient_inliers",
+        "tentative_matches": 18,
+        "inlier_matches": 4,
+    }]
+    graph = {
+        "image_count": 2,
+        "components": [[0], [1]],
+        "isolated_image_indices": [0, 1],
+    }
+    recommendations = recommend_capture_improvements(images, pairs, graph)
+    assert recommendations
+    assert all("evidence" in item and "confidence" in item for item in recommendations)
+    assert any(item["image_indices"] == [0, 1] for item in recommendations)
