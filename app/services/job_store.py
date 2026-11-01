@@ -6,6 +6,7 @@ from threading import RLock
 from uuid import UUID
 
 from app.schemas.jobs import JobResponse
+from app.core.config import settings
 
 
 class PersistentJobStore:
@@ -63,3 +64,6 @@ class PersistentJobStore:
         with self._lock, self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) FROM jobs").fetchone()
         return int(row[0])
+
+
+job_store = PersistentJobStore(settings.job_db_path)
