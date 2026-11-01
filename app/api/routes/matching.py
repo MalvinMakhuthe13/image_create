@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import settings
+from app.engine.matching.capture_advisor import recommend_capture_improvements
 from app.engine.matching import (
     build_connectivity_graph,
     extract_features,
@@ -613,6 +614,17 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             ),
         },
         "connectivity": graph,
+        "capture_recommendations": recommend_capture_improvements(
+            [
+                {
+                    "image_index": index,
+                    "feature_count": features[index].feature_count,
+                }
+                for index in range(len(features))
+            ],
+            pair_results,
+            graph,
+        ),
         "coverage_assessment": {
             "status": "not_assessed",
             "reason": (
