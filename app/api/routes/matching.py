@@ -494,7 +494,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 if candidate.shape == (expected[1], expected[0]):
                     region = {
                         "status": "automatic", "method": "cached_u2net_mask",
-                        "mask": candidate, "foreground_fraction": round(float((candidate > 0).mean()), 5),
+                        "mask": candidate,
+                        "foreground_fraction": round(float((candidate > 0).mean()), 5),
+                        "plausible": 0.005 <= float((candidate > 0).mean()) <= 0.98,
                     }
             except (OSError, ValueError):
                 region = None
@@ -516,6 +518,35 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         automatic_summaries.append({
             key: value for key, value in region.items() if key != "mask"
         } | {"image_index": index, "accepted_for_object_matching": accepted})
+
+    # The correspondence-support diagnostics must describe the same accepted
+    # mask that object-only feature extraction actually uses, not the old
+    # advisory GrabCut proposal computed earlier.
+    for index, mask in enumerate(manual_masks):
+        if mask is None:
+            continue
+        with Image.open(image_paths[index]) as source:
+            oriented_size = ImageOps.exif_transpose(source).size
+        region = {
+            "status": mask_sources[index],
+            "reason": "manual_override" if mask_sources[index] == "manual" else "accepted_u2net_mask",
+            "width": oriented_size[0],
+            "height": oriented_size[1],
+            "mask": np.asarray(mask, dtype=np.uint8),
+            "foreground_fraction": round(float(mask.mean()), 5),
+        }
+        classified = classify_keypoints(features[index], region)
+        classified["mask"] = region["mask"]
+        classified["width"] = region["width"]
+        classified["height"] = region["height"]
+        subject_regions[index] = classified
+        subject_summaries[index]["segmentation"] = {
+            key: value for key, value in region.items() if key != "mask"
+        }
+        subject_summaries[index]["keypoint_region_summary"] = {
+            key: value for key, value in classified.items()
+            if key not in {"labels", "mask"}
+        }
 
     # Object-only extraction is independent of the all-scene baseline. The
     # detector sees only pixels inside the user's saved mask, with a one-pixel
@@ -563,7 +594,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         non_adjacent_pairs_evaluated += int(not is_adjacent)
 
         # Object-only RANSAC receives only all-scene descriptor matches for
-        # which BOTH original-image endpoints fall inside their saved manual masks.
+        # which BOTH original-image endpoints fall inside their accepted automatic or manual masks.
         left_mask, right_mask = manual_masks[left_index], manual_masks[right_index]
         if left_mask is None or right_mask is None:
             object_only = {
@@ -595,7 +626,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             # Enforce the authoritative masks again at original-image keypoint
             # coordinates. Detector masks constrain SIFT detection, while this
             # second gate guarantees every correspondence passed to RANSAC has
-            # both endpoints inside the saved foreground masks.
+            # both endpoints inside the accepted foreground masks.
             object_matches = [
                 match for match in raw_object_matches
                 if _inside_both_manual_masks(
