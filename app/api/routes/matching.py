@@ -574,8 +574,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "reason": "accepted_automatic_or_manual_masks_required_for_both_images",
                 "inlier_match_indices": [], "diagnostic_correspondences": [],
                 "filtered_match_count": 0,
-                "mask_sources": ["manual" if left_mask is not None else "missing",
-                                 "manual" if right_mask is not None else "missing"],
+                "mask_sources": [mask_sources[left_index], mask_sources[right_index]],
                 "mask_filter_diagnostics": {
                     "status": "unavailable",
                     "reason": "valid_automatic_or_manual_masks_required_for_both_images",
@@ -638,7 +637,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "max_features_per_image": max(8000, settings.matching_max_features * 2),
                     "mask_boundary_eroded_px_at_working_resolution": 1,
                     "note": (
-                        "Descriptors were detected independently inside each saved manual "
+                        "Descriptors were detected independently inside each accepted automatic or manual "
                         "mask; this is not merely a post-filter of all-scene descriptors."
                     ),
                 },
@@ -723,8 +722,8 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "width": features[index].image_width,
                     "height": features[index].image_height,
                 },
-                "manual_mask": {
-                    "status": "manual" if manual_masks[index] is not None else "missing_or_invalid",
+                "subject_mask": {
+                    "status": mask_sources[index],
                     "foreground_fraction": (
                         round(float(manual_masks[index].mean()), 4)
                         if manual_masks[index] is not None else None
@@ -744,20 +743,18 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         "pair_results": pair_results,
         "subject_region_diagnostics": {
             "method": "manual override; otherwise cached U2-Net ONNX CPU segmentation, with heuristic GrabCut fallback diagnostics",
-            "status": "mixed_manual_and_heuristic" if any(
-                item["segmentation"]["status"] == "manual" for item in subject_summaries
-            ) else "heuristic_only",
+            "status": "available" if any(source in {"manual", "automatic"} for source in mask_sources) else "heuristic_fallback_or_unavailable",
             "images": subject_summaries,
+            "automatic_masks": automatic_summaries,
             "object_only_matching": (
-                "A separate object-only RANSAC pass uses only matches whose two endpoints "
-                "fall inside the saved manual masks for both images. Missing masks are not "
-                "replaced by automatic GrabCut. The connectivity graph remains all-scene."
+                "A separate object-only RANSAC pass uses only matches whose two endpoints fall "
+                "inside accepted U2-Net automatic masks or user manual overrides. Heuristic "
+                "GrabCut fallbacks are never promoted to authoritative masks. Connectivity remains all-scene."
             ),
             "warning": (
-                "Manual masks are user-defined white=object / black=background regions. "
-                "Images without a saved manual mask use automatic GrabCut proposals, which "
-                "may include table/floor or omit subject parts. All region support remains "
-                "advisory and does not alter geometric verification or graph connectivity."
+                "Automatic masks are model predictions and may still omit details or include "
+                "background. Review them when quality diagnostics are weak. Manual masks override "
+                "automatic masks; heuristic GrabCut fallback is not used for object-only RANSAC."
             ),
         },
         "connectivity": graph,
