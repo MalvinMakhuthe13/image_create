@@ -286,3 +286,26 @@ def test_feature_extractor_prefers_user_calibration_and_distortion(tmp_path):
     assert features.intrinsics_source == "user_supplied_calibration"
     assert np.allclose(features.camera_matrix, calibration["camera_matrix"])
     assert features.distortion_coefficients.shape == (5, 1)
+
+def test_camera_centre_scale_gauge_uses_world_space_centres_for_rotated_cameras():
+    from app.engine.matching.sparse_reconstruction import _camera_center
+
+    angle = np.deg2rad(35.0)
+    rotation_left = np.array([
+        [np.cos(angle), 0.0, np.sin(angle)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(angle), 0.0, np.cos(angle)],
+    ])
+    rotation_right = np.eye(3)
+    centre_left = np.array([1.0, 2.0, 3.0])
+    centre_right = np.array([4.0, 2.0, 3.0])
+    translation_left = -rotation_left @ centre_left
+    translation_right = -rotation_right @ centre_right
+
+    recovered_left = _camera_center(rotation_left, translation_left)
+    recovered_right = _camera_center(rotation_right, translation_right)
+
+    assert np.allclose(recovered_left, centre_left)
+    assert np.allclose(recovered_right, centre_right)
+    assert np.isclose(np.linalg.norm(recovered_right - recovered_left), 3.0)
+
