@@ -575,7 +575,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
     verified_pairs = []
     subject_verified_pairs = []
     pair_results = []
-    reconstruction_pair_rows = []
+    subject_reconstruction_pair_rows = []
     adjacent_pairs_evaluated = 0
     non_adjacent_pairs_evaluated = 0
 
@@ -703,13 +703,12 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         subject_eligibility = _subject_connectivity_eligibility(object_only)
         if subject_eligibility["eligible"]:
             subject_verified_pairs.append((left_index, right_index, object_result))
-
-        reconstruction_pair_rows.append({
-            "image_indices": [left_index, right_index],
-            "_matches": matches,
-            "_inliers": result.inlier_match_indices,
-            "pose": (result.diagnostics or {}).get("relative_camera_pose"),
-        })
+            subject_reconstruction_pair_rows.append({
+                "image_indices": [left_index, right_index],
+                "_matches": object_matches,
+                "_inliers": object_result.inlier_match_indices,
+                "pose": (object_result.diagnostics or {}).get("relative_camera_pose"),
+            })
         pair_results.append({
             "image_indices": [left_index, right_index],
             "filenames": [image_paths[left_index].name, image_paths[right_index].name],
@@ -731,7 +730,11 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
 
     graph = build_connectivity_graph(len(image_paths), verified_pairs)
     subject_graph = build_connectivity_graph(len(image_paths), subject_verified_pairs)
-    sparse_reconstruction = reconstruct_sparse_scene(features, reconstruction_pair_rows)
+    # Use masked object keypoints and object-only verified correspondences.
+    # Background features must never seed object landmarks or camera edges.
+    sparse_reconstruction = reconstruct_sparse_scene(
+        object_features, subject_reconstruction_pair_rows
+    )
     return {
         "analysis_id": str(analysis_id),
         "status": "complete",
@@ -750,6 +753,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             "verified_pairs": graph["verified_edge_count"],
             "connected_components": len(graph["components"]),
             "isolated_images": len(graph["isolated_image_indices"]),
+            "subject_verified_pairs": len(subject_verified_pairs),
+            "subject_connected_components": len(subject_graph["components"]),
+            "subject_isolated_images": len(subject_graph["isolated_image_indices"]),
         },
         "images": [
             {
