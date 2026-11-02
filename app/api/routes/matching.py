@@ -597,7 +597,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             object_right = object_features[right_index]
             raw_object_matches = match_descriptors(
                 object_left, object_right,
-                ratio_threshold=0.86,
+                ratio_threshold=0.78,
                 max_matches=6000,
             )
             # Enforce the authoritative masks again at original-image keypoint
@@ -641,7 +641,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "method": "masked_sift_clahe_high_recall",
                     "left_object_features": object_left.feature_count,
                     "right_object_features": object_right.feature_count,
-                    "ratio_threshold": 0.86,
+                    "ratio_threshold": 0.78,
                     "max_features_per_image": max(8000, settings.matching_max_features * 2),
                     "mask_boundary_eroded_px_at_working_resolution": 1,
                     "note": (
