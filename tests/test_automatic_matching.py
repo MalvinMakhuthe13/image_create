@@ -60,6 +60,7 @@ def test_matching_uses_accepted_automatic_masks_without_manual_painting(tmp_path
     pair = report["pair_results"][0]
     assert pair["object_only"]["mask_sources"] == ["automatic", "automatic"]
     assert pair["object_only"]["status"] == "complete"
+    assert pair["object_only"]["feature_extraction"]["ratio_threshold"] == 0.78
     for path, original_hash in zip(paths, original_hashes):
         assert hashlib.sha256(path.read_bytes()).hexdigest() == original_hash
     cached = settings.upload_dir.parent / "automatic_masks" / analysis_id / "000.png"
