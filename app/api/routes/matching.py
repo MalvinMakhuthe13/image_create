@@ -389,6 +389,29 @@ def _spatial_distribution(left, right, matches, result) -> dict:
     }
 
 
+def _subject_connectivity_eligibility(object_only: dict) -> dict:
+    """Require verified, spatially distributed object evidence before graph linking."""
+    if object_only.get("status") != "complete":
+        return {"eligible": False, "reason": "accepted_subject_masks_required"}
+    spatial = object_only.get("spatial_distribution") or {}
+    distribution = spatial.get("unique_location_distribution", {})
+    left = distribution.get("left_image", {})
+    right = distribution.get("right_image", {})
+    checks = {
+        "geometry_verified": bool(object_only.get("verified")),
+        "minimum_unique_inliers": int(spatial.get("unique_spatial_inlier_matches", 0)) >= 12,
+        "left_spatial_spread": int(left.get("occupied_grid_cells", 0)) >= 3 and float(left.get("bounding_box_area_fraction", 0.0)) >= 0.01,
+        "right_spatial_spread": int(right.get("occupied_grid_cells", 0)) >= 3 and float(right.get("bounding_box_area_fraction", 0.0)) >= 0.01,
+    }
+    accepted = all(checks.values())
+    return {
+        "eligible": accepted,
+        "reason": "subject_geometry_and_spatial_support_sufficient" if accepted else "subject_support_below_connectivity_threshold",
+        "checks": checks,
+        "thresholds": {"minimum_unique_spatial_inliers": 12, "minimum_occupied_grid_cells_per_image": 3, "minimum_bounding_box_area_fraction_per_image": 0.01},
+        "interpretation": "Conservative 2D subject-overlap link; not proof of calibrated pose or complete 3D surface coverage.",
+    }
+
 @router.post("/{analysis_id}/matching")
 def match_uploaded_analysis(analysis_id: UUID) -> dict:
     """Run bounded CPU geometric matching against images from a completed upload."""
@@ -550,8 +573,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             ) from exc
 
     verified_pairs = []
+    subject_verified_pairs = []
     pair_results = []
-    reconstruction_pair_rows = []
+    subject_reconstruction_pair_rows = []
     adjacent_pairs_evaluated = 0
     non_adjacent_pairs_evaluated = 0
 
@@ -597,7 +621,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             object_right = object_features[right_index]
             raw_object_matches = match_descriptors(
                 object_left, object_right,
-                ratio_threshold=0.86,
+                ratio_threshold=0.78,
                 max_matches=6000,
             )
             # Enforce the authoritative masks again at original-image keypoint
@@ -641,7 +665,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "method": "masked_sift_clahe_high_recall",
                     "left_object_features": object_left.feature_count,
                     "right_object_features": object_right.feature_count,
-                    "ratio_threshold": 0.86,
+                    "ratio_threshold": 0.78,
                     "max_features_per_image": max(8000, settings.matching_max_features * 2),
                     "mask_boundary_eroded_px_at_working_resolution": 1,
                     "note": (
@@ -676,12 +700,15 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 ),
             }
 
-        reconstruction_pair_rows.append({
-            "image_indices": [left_index, right_index],
-            "_matches": matches,
-            "_inliers": result.inlier_match_indices,
-            "pose": (result.diagnostics or {}).get("relative_camera_pose"),
-        })
+        subject_eligibility = _subject_connectivity_eligibility(object_only)
+        if subject_eligibility["eligible"]:
+            subject_verified_pairs.append((left_index, right_index, object_result))
+            subject_reconstruction_pair_rows.append({
+                "image_indices": [left_index, right_index],
+                "_matches": object_matches,
+                "_inliers": object_result.inlier_match_indices,
+                "pose": (object_result.diagnostics or {}).get("relative_camera_pose"),
+            })
         pair_results.append({
             "image_indices": [left_index, right_index],
             "filenames": [image_paths[left_index].name, image_paths[right_index].name],
@@ -694,6 +721,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 subject_regions[left_index], subject_regions[right_index],
             ),
             "object_only": object_only,
+            "subject_connectivity_eligibility": subject_eligibility,
             "diagnostic_correspondences_note": (
                 "Includes all geometric inliers and up to 100 closest-descriptor outliers. "
                 "Coordinates are measured in the original uploaded images."
@@ -701,7 +729,12 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         })
 
     graph = build_connectivity_graph(len(image_paths), verified_pairs)
-    sparse_reconstruction = reconstruct_sparse_scene(features, reconstruction_pair_rows)
+    subject_graph = build_connectivity_graph(len(image_paths), subject_verified_pairs)
+    # Use masked object keypoints and object-only verified correspondences.
+    # Background features must never seed object landmarks or camera edges.
+    sparse_reconstruction = reconstruct_sparse_scene(
+        object_features, subject_reconstruction_pair_rows
+    )
     return {
         "analysis_id": str(analysis_id),
         "status": "complete",
@@ -720,6 +753,9 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             "verified_pairs": graph["verified_edge_count"],
             "connected_components": len(graph["components"]),
             "isolated_images": len(graph["isolated_image_indices"]),
+            "subject_verified_pairs": len(subject_verified_pairs),
+            "subject_connected_components": len(subject_graph["components"]),
+            "subject_isolated_images": len(subject_graph["isolated_image_indices"]),
         },
         "images": [
             {
@@ -770,6 +806,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             ),
         },
         "connectivity": graph,
+        "subject_connectivity": {**subject_graph, "edge_policy": "Object-only verified pairs require at least 12 unique spatial inliers, 3 occupied 4x4 grid cells in each image, and 1% bounding-box area in each image.", "warning": "A conservative 2D subject-overlap graph, not proof of calibration, depth, or complete surface coverage."},
         "sparse_reconstruction": sparse_reconstruction,
         "capture_recommendations": recommend_capture_improvements(
             [
