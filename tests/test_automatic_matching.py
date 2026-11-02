@@ -102,3 +102,46 @@ def test_low_confidence_fallback_is_not_used_for_object_only_ransac(tmp_path, mo
     assert pair["object_only"]["status"] == "missing_automatic_or_manual_mask"
     assert pair["object_only"]["mask_sources"] == ["unavailable", "unavailable"]
     assert pair["verified"] in (True, False)  # all-scene geometry remains independent
+
+
+def test_subject_connectivity_rejects_concentrated_object_matches():
+    from app.api.routes.matching import _subject_connectivity_eligibility
+
+    object_only = {
+        "status": "complete", "verified": True,
+        "spatial_distribution": {
+            "unique_spatial_inlier_matches": 14,
+            "unique_location_distribution": {
+                "left_image": {"occupied_grid_cells": 2, "bounding_box_area_fraction": 0.00234},
+                "right_image": {"occupied_grid_cells": 4, "bounding_box_area_fraction": 0.03},
+            },
+        },
+    }
+    result = _subject_connectivity_eligibility(object_only)
+    assert result["eligible"] is False
+    assert result["checks"]["left_spatial_spread"] is False
+
+
+def test_subject_connectivity_accepts_verified_distributed_object_matches():
+    from app.api.routes.matching import _subject_connectivity_eligibility
+
+    object_only = {
+        "status": "complete", "verified": True,
+        "spatial_distribution": {
+            "unique_spatial_inlier_matches": 18,
+            "unique_location_distribution": {
+                "left_image": {"occupied_grid_cells": 5, "bounding_box_area_fraction": 0.04},
+                "right_image": {"occupied_grid_cells": 4, "bounding_box_area_fraction": 0.03},
+            },
+        },
+    }
+    result = _subject_connectivity_eligibility(object_only)
+    assert result["eligible"] is True
+    assert all(result["checks"].values())
+
+
+def test_subject_connectivity_rejects_unverified_or_missing_masks():
+    from app.api.routes.matching import _subject_connectivity_eligibility
+
+    assert _subject_connectivity_eligibility({"status": "missing_automatic_or_manual_mask"})["eligible"] is False
+    assert _subject_connectivity_eligibility({"status": "complete", "verified": False})["eligible"] is False
