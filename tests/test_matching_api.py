@@ -60,6 +60,22 @@ def test_candidate_pair_scheduler_keeps_adjacent_pairs():
 
 def test_diagnostics_include_coordinates_and_pair_types(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
+
+    # This test covers diagnostics when no authoritative subject mask exists.
+    # Keep it independent of whether the optional U2-Net model is installed.
+    from app.api.routes import matching as matching_route
+
+    monkeypatch.setattr(
+        matching_route,
+        "generate_subject_mask",
+        lambda image_path: {
+            "status": "unavailable",
+            "method": "test_no_model_mask",
+            "mask": None,
+            "plausible": False,
+            "reason": "deterministic_test_fixture",
+        },
+    )
     upload = client.post(
         "/api/v1/analysis/images",
         files=[
@@ -309,6 +325,22 @@ def test_manual_mask_match_filter_requires_both_endpoints_inside_masks():
 
 def test_object_only_matching_requires_saved_manual_masks(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
+
+    # This test specifically exercises the missing-mask branch, not model
+    # inference. Automatic-mask success is covered in test_automatic_matching.py.
+    from app.api.routes import matching as matching_route
+
+    monkeypatch.setattr(
+        matching_route,
+        "generate_subject_mask",
+        lambda image_path: {
+            "status": "unavailable",
+            "method": "test_no_model_mask",
+            "mask": None,
+            "plausible": False,
+            "reason": "deterministic_test_fixture",
+        },
+    )
     upload = client.post(
         "/api/v1/analysis/images",
         files=[
