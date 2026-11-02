@@ -95,8 +95,8 @@ def classify_keypoints(features, region: dict) -> dict:
         "foreground_fraction": round(foreground / total, 4) if total else 0.0,
         "labels": tuple(labels),
         "confidence_note": (
-            "Heuristic GrabCut region proposal; foreground may include table/floor "
-            "and is not a semantic object mask."
+            "Subject-region mask; foreground may include nearby surfaces "
+            "and mask provenance is reported separately."
         ),
     }
 
@@ -133,7 +133,7 @@ def pair_subject_support(matches, geometry, left_regions: dict, right_regions: d
         if total >= 8 and (both_bg + mixed) > both_fg else None
     )
     return {
-        "status": "heuristic",
+        "status": "cross_frame_support_diagnostic",
         "verified_correspondences": total,
         "both_foreground": both_fg,
         "both_background": both_bg,
@@ -141,8 +141,9 @@ def pair_subject_support(matches, geometry, left_regions: dict, right_regions: d
         "foreground_support_fraction": round(fraction, 4) if total else 0.0,
         "warning": warning,
         "confidence_note": (
-            "Foreground means inside an automatic GrabCut proposal, not confirmed object pixels. "
-            "This score is advisory and does not alter geometric verification or graph connectivity."
+            "Foreground means inside the accepted subject mask. This cross-frame support score "
+            "is diagnostic only: it does not certify silhouette completeness or alter "
+            "geometric verification and all-scene graph connectivity."
         ),
     }
 

@@ -22,8 +22,11 @@ from app.engine.matching import (
 )
 from app.engine.matching.subject_region import (
     classify_keypoints,
-    estimate_subject_region,
     pair_subject_support,
+)
+from app.engine.matching.automatic_segmentation import (
+    generate_subject_mask,
+    save_generated_mask,
 )
 from app.engine.matching.mask_boundary import (
     summarize_mask_boundary_distances,
@@ -48,7 +51,12 @@ def _load_manual_mask(analysis_id: UUID, image_index: int, image_path: Path):
             width, height = ImageOps.exif_transpose(source).size
     except (OSError, ValueError):
         return None
-    return mask if mask.shape == (height, width) else None
+    if mask.shape != (height, width):
+        return None
+    foreground_fraction = float(mask.mean())
+    if not 0.005 <= foreground_fraction <= 0.98:
+        return None
+    return mask
 
 
 def _point_inside_manual_mask(image, keypoint_index, mask) -> bool:
@@ -417,55 +425,105 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             detail=f"Could not extract features from stored image: {exc}",
         ) from exc
 
-    # Automatic foreground proposals are deliberately advisory. They are
-    # computed once per image and never participate in RANSAC or graph edges.
-    subject_regions = []
-    subject_summaries = []
+    # Subject-region support is populated below from the exact accepted mask
+    # used for object-only extraction; no separate GrabCut proposal is needed.
+    subject_regions = [None] * len(image_paths)
+    subject_summaries = [None] * len(image_paths)
+
+    # Manual masks take precedence. Otherwise use a cached/generated U2-Net mask.
+    # Heuristic GrabCut proposals remain advisory and are NOT silently promoted
+    # to authoritative object masks.
+    automatic_mask_dir = Path(settings.upload_dir).parent / "automatic_masks" / str(analysis_id)
+    manual_masks = []
+    mask_sources = []
+    automatic_summaries = []
     for index, image_path in enumerate(image_paths):
-        manual_mask_path = (
-            Path(settings.upload_dir).parent / "masks" / str(analysis_id) / f"{index:03d}.png"
+        manual_mask = _load_manual_mask(analysis_id, index, image_path)
+        if manual_mask is not None:
+            manual_masks.append(manual_mask)
+            mask_sources.append("manual")
+            automatic_summaries.append({
+                "image_index": index, "status": "manual_override",
+                "method": "user_supplied_mask",
+            })
+            continue
+
+        cached_path = automatic_mask_dir / f"{index:03d}.png"
+        region = None
+        if cached_path.is_file():
+            try:
+                with Image.open(cached_path) as source:
+                    source.load()
+                    candidate = np.asarray(source.convert("L"), dtype=np.uint8)
+                with Image.open(image_path) as source:
+                    expected = ImageOps.exif_transpose(source).size
+                if candidate.shape == (expected[1], expected[0]):
+                    region = {
+                        "status": "automatic", "method": "cached_u2net_mask",
+                        "mask": candidate,
+                        "foreground_fraction": round(float((candidate > 0).mean()), 5),
+                        "plausible": 0.005 <= float((candidate > 0).mean()) <= 0.98,
+                    }
+            except (OSError, ValueError):
+                region = None
+        if region is None:
+            region = generate_subject_mask(image_path)
+            if region.get("status") == "automatic" and region.get("mask") is not None:
+                save_generated_mask(region["mask"], cached_path)
+
+        accepted = (
+            region.get("status") == "automatic"
+            and region.get("mask") is not None
+            and bool(region.get("plausible", True))
         )
-        if manual_mask_path.is_file():
-            with Image.open(manual_mask_path) as source:
-                manual_mask = (np.asarray(source.convert("L"), dtype=np.uint8) >= 128).astype(np.uint8)
-            with Image.open(image_path) as source:
-                image_width, image_height = source.size
+        manual_masks.append(
+            (np.asarray(region["mask"], dtype=np.uint8) >= 128)
+            if accepted else None
+        )
+        mask_sources.append("automatic" if accepted else "unavailable")
+        automatic_summaries.append({
+            key: value for key, value in region.items() if key != "mask"
+        } | {"image_index": index, "accepted_for_object_matching": accepted})
+
+    # The correspondence-support diagnostics must describe the same accepted
+    # mask that object-only feature extraction actually uses, not the old
+    # advisory GrabCut proposal computed earlier.
+    for index, mask in enumerate(manual_masks):
+        with Image.open(image_paths[index]) as source:
+            oriented_size = ImageOps.exif_transpose(source).size
+        if mask is None:
             region = {
-                "status": "manual",
-                "reason": "user_supplied_binary_object_mask",
-                "width": image_width,
-                "height": image_height,
-                "mask_width": int(manual_mask.shape[1]),
-                "mask_height": int(manual_mask.shape[0]),
-                "foreground_fraction": round(float(manual_mask.mean()), 4),
-                "mask": manual_mask,
+                "status": "unavailable",
+                "reason": "no_accepted_model_mask_or_manual_override",
+                "width": oriented_size[0],
+                "height": oriented_size[1],
+                "mask": None,
             }
         else:
-            region = estimate_subject_region(image_path)
+            region = {
+                "status": mask_sources[index],
+                "reason": "manual_override" if mask_sources[index] == "manual" else "accepted_u2net_mask",
+                "width": oriented_size[0],
+                "height": oriented_size[1],
+                "mask": np.asarray(mask, dtype=np.uint8),
+                "foreground_fraction": round(float(mask.mean()), 5),
+            }
         classified = classify_keypoints(features[index], region)
-        classified["mask"] = region.get("mask")
-        classified["width"] = region.get("width")
-        classified["height"] = region.get("height")
-        subject_regions.append(classified)
-        subject_summaries.append({
+        classified["mask"] = region["mask"]
+        classified["width"] = region["width"]
+        classified["height"] = region["height"]
+        subject_regions[index] = classified
+        subject_summaries[index] = {
             "image_index": index,
-            "filename": image_path.name,
+            "filename": image_paths[index].name,
             "segmentation": {
-                key: value for key, value in region.items()
-                if key != "mask"
+                key: value for key, value in region.items() if key != "mask"
             },
             "keypoint_region_summary": {
                 key: value for key, value in classified.items()
                 if key not in {"labels", "mask"}
             },
-        })
-
-    # Only saved, user-painted masks are authoritative for object-only matching.
-    # Automatic GrabCut proposals remain available as diagnostics, never as substitutes.
-    manual_masks = [
-        _load_manual_mask(analysis_id, index, image_path)
-        for index, image_path in enumerate(image_paths)
-    ]
+        }
 
     # Object-only extraction is independent of the all-scene baseline. The
     # detector sees only pixels inside the user's saved mask, with a one-pixel
@@ -513,22 +571,21 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         non_adjacent_pairs_evaluated += int(not is_adjacent)
 
         # Object-only RANSAC receives only all-scene descriptor matches for
-        # which BOTH original-image endpoints fall inside their saved manual masks.
+        # which BOTH original-image endpoints fall inside their accepted automatic or manual masks.
         left_mask, right_mask = manual_masks[left_index], manual_masks[right_index]
         if left_mask is None or right_mask is None:
             object_only = {
-                "status": "missing_manual_mask",
+                "status": "missing_automatic_or_manual_mask",
                 "verified": False, "model": "none",
                 "tentative_matches": 0, "inlier_matches": 0,
                 "inlier_ratio": 0.0, "median_reprojection_error_px": None,
-                "reason": "manual_masks_required_for_both_images",
+                "reason": "accepted_automatic_or_manual_masks_required_for_both_images",
                 "inlier_match_indices": [], "diagnostic_correspondences": [],
                 "filtered_match_count": 0,
-                "mask_sources": ["manual" if left_mask is not None else "missing",
-                                 "manual" if right_mask is not None else "missing"],
+                "mask_sources": [mask_sources[left_index], mask_sources[right_index]],
                 "mask_filter_diagnostics": {
                     "status": "unavailable",
-                    "reason": "valid_manual_masks_required_for_both_images",
+                    "reason": "valid_automatic_or_manual_masks_required_for_both_images",
                     "total_descriptor_matches": len(matches),
                 },
             }
@@ -546,7 +603,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             # Enforce the authoritative masks again at original-image keypoint
             # coordinates. Detector masks constrain SIFT detection, while this
             # second gate guarantees every correspondence passed to RANSAC has
-            # both endpoints inside the saved foreground masks.
+            # both endpoints inside the accepted foreground masks.
             object_matches = [
                 match for match in raw_object_matches
                 if _inside_both_manual_masks(
@@ -572,7 +629,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "matches_with_both_endpoints_inside_masks": len(object_matches),
                 "rejected_for_mask_violation": len(raw_object_matches) - len(object_matches),
                 "ransac_input_matches": len(object_matches),
-                "enforcement": "both_keypoint_centres_must_be_inside_their_saved_manual_masks",
+                "enforcement": "both_keypoint_centres_must_be_inside_their_accepted_subject_masks",
             }
             object_result = verify_geometry(
                 object_left, object_right, object_matches
@@ -588,7 +645,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "max_features_per_image": max(8000, settings.matching_max_features * 2),
                     "mask_boundary_eroded_px_at_working_resolution": 1,
                     "note": (
-                        "Descriptors were detected independently inside each saved manual "
+                        "Descriptors were detected independently inside each accepted automatic or manual "
                         "mask; this is not merely a post-filter of all-scene descriptors."
                     ),
                 },
@@ -599,7 +656,7 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                 "spatial_distribution": _spatial_distribution(
                     object_left, object_right, object_matches, object_result
                 ),
-                "mask_sources": ["manual", "manual"],
+                "mask_sources": [mask_sources[left_index], mask_sources[right_index]],
                 "mask_filter_diagnostics": {
                     **mask_filter_diagnostics,
                     "interpretation": (
@@ -673,8 +730,8 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
                     "width": features[index].image_width,
                     "height": features[index].image_height,
                 },
-                "manual_mask": {
-                    "status": "manual" if manual_masks[index] is not None else "missing_or_invalid",
+                "subject_mask": {
+                    "status": mask_sources[index],
                     "foreground_fraction": (
                         round(float(manual_masks[index].mean()), 4)
                         if manual_masks[index] is not None else None
@@ -693,21 +750,23 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
         ],
         "pair_results": pair_results,
         "subject_region_diagnostics": {
-            "method": "manual binary masks where supplied; otherwise CPU GrabCut proposal",
-            "status": "mixed_manual_and_heuristic" if any(
-                item["segmentation"]["status"] == "manual" for item in subject_summaries
-            ) else "heuristic_only",
+            "method": "manual override; otherwise cached U2-Net ONNX CPU segmentation, with heuristic GrabCut fallback diagnostics",
+            "status": (
+                "available" if all(source in {"manual", "automatic"} for source in mask_sources)
+                else "partial" if any(source in {"manual", "automatic"} for source in mask_sources)
+                else "unavailable"
+            ),
             "images": subject_summaries,
+            "automatic_masks": automatic_summaries,
             "object_only_matching": (
-                "A separate object-only RANSAC pass uses only matches whose two endpoints "
-                "fall inside the saved manual masks for both images. Missing masks are not "
-                "replaced by automatic GrabCut. The connectivity graph remains all-scene."
+                "A separate object-only RANSAC pass uses only matches whose two endpoints fall "
+                "inside accepted U2-Net automatic masks or user manual overrides. Heuristic "
+                "GrabCut fallbacks are never promoted to authoritative masks. Connectivity remains all-scene."
             ),
             "warning": (
-                "Manual masks are user-defined white=object / black=background regions. "
-                "Images without a saved manual mask use automatic GrabCut proposals, which "
-                "may include table/floor or omit subject parts. All region support remains "
-                "advisory and does not alter geometric verification or graph connectivity."
+                "Automatic masks are model predictions and may still omit details or include "
+                "background. Review them when quality diagnostics are weak. Manual masks override "
+                "automatic masks; heuristic GrabCut fallback is not used for object-only RANSAC."
             ),
         },
         "connectivity": graph,
@@ -741,6 +800,6 @@ def match_uploaded_analysis(analysis_id: UUID) -> dict:
             "Diagnostic coordinates are 2D feature correspondences, not 3D points or surface coverage.",
             "Spatial concentration warnings are heuristics and do not automatically invalidate a pair.",
             "Object-only diagnostics use masked keypoints, but the connectivity graph continues to use all-scene matching.",
-            "Object-only RANSAC requires saved manual masks for both images; automatic GrabCut proposals are never substituted.",
+            "Object-only RANSAC uses accepted automatic model masks or manual overrides; heuristic GrabCut fallbacks are not treated as semantic masks.",
         ],
     }

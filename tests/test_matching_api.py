@@ -60,6 +60,22 @@ def test_candidate_pair_scheduler_keeps_adjacent_pairs():
 
 def test_diagnostics_include_coordinates_and_pair_types(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
+
+    # This test covers diagnostics when no authoritative subject mask exists.
+    # Keep it independent of whether the optional U2-Net model is installed.
+    from app.api.routes import matching as matching_route
+
+    monkeypatch.setattr(
+        matching_route,
+        "generate_subject_mask",
+        lambda image_path: {
+            "status": "unavailable",
+            "method": "test_no_model_mask",
+            "mask": None,
+            "plausible": False,
+            "reason": "deterministic_test_fixture",
+        },
+    )
     upload = client.post(
         "/api/v1/analysis/images",
         files=[
@@ -80,7 +96,7 @@ def test_diagnostics_include_coordinates_and_pair_types(tmp_path, monkeypatch):
     assert "object_only" in pair
     assert "diagnostic_correspondences" in pair["object_only"]
     assert "dimensions" in body["images"][0]
-    assert body["images"][0]["manual_mask"]["status"] == "missing_or_invalid"
+    assert body["images"][0]["subject_mask"]["status"] == "unavailable"
     assert body["pair_results"][0]["object_only"]["mask_filter_diagnostics"]["status"] == "unavailable"
 
 def test_spatial_distribution_flags_concentrated_inliers():
@@ -240,9 +256,8 @@ def test_subject_region_support_is_advisory_and_does_not_change_geometry():
 
 
 def test_classify_keypoints_uses_region_mask_coordinates():
-    from types import SimpleNamespace
-
     import numpy as np
+    from types import SimpleNamespace
 
     from app.engine.matching.subject_region import classify_keypoints
 
@@ -310,6 +325,22 @@ def test_manual_mask_match_filter_requires_both_endpoints_inside_masks():
 
 def test_object_only_matching_requires_saved_manual_masks(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "upload_dir", tmp_path)
+
+    # This test specifically exercises the missing-mask branch, not model
+    # inference. Automatic-mask success is covered in test_automatic_matching.py.
+    from app.api.routes import matching as matching_route
+
+    monkeypatch.setattr(
+        matching_route,
+        "generate_subject_mask",
+        lambda image_path: {
+            "status": "unavailable",
+            "method": "test_no_model_mask",
+            "mask": None,
+            "plausible": False,
+            "reason": "deterministic_test_fixture",
+        },
+    )
     upload = client.post(
         "/api/v1/analysis/images",
         files=[
@@ -321,8 +352,8 @@ def test_object_only_matching_requires_saved_manual_masks(tmp_path, monkeypatch)
     response = client.post(f"/api/v1/analysis/{analysis_id}/matching")
     assert response.status_code == 200
     pair = response.json()["pair_results"][0]
-    assert pair["object_only"]["status"] == "missing_manual_mask"
-    assert pair["object_only"]["reason"] == "manual_masks_required_for_both_images"
+    assert pair["object_only"]["status"] == "missing_automatic_or_manual_mask"
+    assert pair["object_only"]["reason"] == "accepted_automatic_or_manual_masks_required_for_both_images"
 
 
 
@@ -338,7 +369,8 @@ def test_object_only_reruns_geometry_using_saved_manual_masks(tmp_path, monkeypa
     analysis_id = upload.json()["analysis_id"]
     mask_dir = tmp_path.parent / "masks" / analysis_id
     mask_dir.mkdir(parents=True)
-    full_foreground = Image.new("L", (640, 480), 255)
+    full_foreground = Image.new("L", (640, 480), 0)
+    ImageDraw.Draw(full_foreground).rectangle((20, 20, 620, 460), fill=255)
     full_foreground.save(mask_dir / "000.png")
     full_foreground.save(mask_dir / "001.png")
 
@@ -547,7 +579,9 @@ def test_object_only_result_includes_its_own_spatial_distribution(tmp_path, monk
     mask_dir = Path(upload_dir).parent / "masks" / analysis_id
     mask_dir.mkdir(parents=True)
     for index in range(2):
-        Image.new("L", (640, 480), 255).save(mask_dir / f"{index:03d}.png")
+        mask_image = Image.new("L", (640, 480), 0)
+        ImageDraw.Draw(mask_image).rectangle((20, 20, 620, 460), fill=255)
+        mask_image.save(mask_dir / f"{index:03d}.png")
 
     response = client.post(f"/api/v1/analysis/{analysis_id}/matching")
     assert response.status_code == 200
@@ -611,7 +645,6 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
     from app.api.routes.matching import _load_manual_mask
     from app.core.config import settings
     from uuid import uuid4
-    import numpy as np
 
     monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
     analysis_id = uuid4()
@@ -625,10 +658,12 @@ def test_manual_mask_loader_uses_exif_oriented_dimensions(tmp_path, monkeypatch)
 
     mask_path = tmp_path / "masks" / str(analysis_id) / "000.png"
     mask_path.parent.mkdir(parents=True)
-    Image.new("L", (48, 64), 255).save(mask_path)
+    mask_image = Image.new("L", (48, 64), 0)
+    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)
+    mask_image.save(mask_path)
 
     mask = _load_manual_mask(analysis_id, 0, image_path)
     assert mask is not None
     assert mask.shape == (64, 48)
-    assert bool(np.all(mask))
+    assert 0.0 < float(mask.mean()) < 1.0
 

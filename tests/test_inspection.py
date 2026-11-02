@@ -2,7 +2,7 @@ from io import BytesIO
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.core.config import settings
 from app.main import app
@@ -84,7 +84,9 @@ def test_mask_and_calibration_dimensions_follow_exif_orientation(tmp_path, monke
 
     client = TestClient(app)
     mask_bytes = BytesIO()
-    Image.new("L", (48, 64), 255).save(mask_bytes, format="PNG")
+    mask_image = Image.new("L", (48, 64), 0)
+    ImageDraw.Draw(mask_image).rectangle((4, 4, 44, 60), fill=255)
+    mask_image.save(mask_bytes, format="PNG")
     saved_mask = client.put(
         f"/api/v1/analysis/{analysis_id}/masks/0",
         files={"file": ("mask.png", mask_bytes.getvalue(), "image/png")},
@@ -107,3 +109,40 @@ def test_mask_and_calibration_dimensions_follow_exif_orientation(tmp_path, monke
     assert calibration.status_code == 200
     assert calibration.json()["dimensions"] == {"width": 48, "height": 64}
 
+
+
+
+def test_automatic_mask_route_serves_cached_mask_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = uuid4()
+    folder = settings.upload_dir / str(analysis_id)
+    _make_upload(folder)
+    client = TestClient(app)
+
+    missing = client.get(f"/api/v1/analysis/{analysis_id}/automatic-masks/0")
+    assert missing.status_code == 404
+
+    mask_path = settings.upload_dir.parent / "automatic_masks" / str(analysis_id) / "000.png"
+    mask_path.parent.mkdir(parents=True)
+    Image.new("L", (64, 48), 0).save(mask_path)
+    response = client.get(f"/api/v1/analysis/{analysis_id}/automatic-masks/0")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+
+
+
+def test_manual_mask_rejects_empty_and_full_foreground(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "upload_dir", tmp_path / "uploads")
+    analysis_id = uuid4()
+    folder = settings.upload_dir / str(analysis_id)
+    _make_upload(folder)
+    client = TestClient(app)
+
+    for value in (0, 255):
+        buffer = BytesIO()
+        Image.new("L", (64, 48), value).save(buffer, format="PNG")
+        response = client.put(
+            f"/api/v1/analysis/{analysis_id}/masks/0",
+            files={"file": ("mask.png", buffer.getvalue(), "image/png")},
+        )
+        assert response.status_code == 422

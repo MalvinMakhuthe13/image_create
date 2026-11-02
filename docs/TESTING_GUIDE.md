@@ -43,7 +43,7 @@ These are capture suggestions, not guarantees.
 6. Paint and save manual object masks on both images in a pair.
 7. Switch to object-only matching. Only matches with both endpoints inside the saved masks should enter object-only RANSAC.
 8. If you have genuine camera calibration for the same camera, lens and image configuration, enter it. Do not guess calibration values.
-9. Repeat with difficult captures: blur, repeated textures, planar scenes, low parallax, missing transitions and disconnected viewpoints.
+9. Repeat with difficult captures: blur, repeated textures, planar scenes, low parallax, missing transitions and disconnected viewpoints. For segmentation specifically, include light-coloured objects on light backgrounds, thin protrusions, accessories, reflective/transparent surfaces, cluttered support tables, multiple foreground objects and substantial viewpoint changes. Record mask failures separately from geometry failures.
 
 ## 4. Interpret results correctly
 
